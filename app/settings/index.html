@@ -4,10 +4,18 @@
     <meta charset="utf-8" />
     <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
     <style>
-      body { font-family: sans-serif; padding: 16px; }
-      h2 { margin-top: 0; }
-      p { color: #444; line-height: 1.5; }
-      button { padding: 10px 16px; margin-right: 8px; margin-bottom: 12px; }
+      body { font-family: sans-serif; padding: 16px; color: #222; }
+      h2 { margin: 0 0 8px; }
+      p { color: #666; line-height: 1.5; font-size: 13px; }
+      button {
+        padding: 8px 14px;
+        margin-right: 8px;
+        margin-bottom: 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #f5f5f5;
+        cursor: pointer;
+      }
       textarea {
         width: 100%;
         height: 320px;
@@ -15,60 +23,58 @@
         font-size: 11px;
         box-sizing: border-box;
       }
-      .count { font-weight: 600; margin-bottom: 12px; }
+      #log-count { font-size: 13px; margin-bottom: 8px; }
     </style>
   </head>
   <body>
-    <h2>Robot log</h2>
-    <p>
-      Raw MIoT values, recorded whenever they change. Useful to capture a
-      mid-clean recharge: run a full clean until the robot goes back to charge on
-      its own, then export and share the CSV.
-    </p>
+    <h2 id="t-log-title"></h2>
+    <p id="t-log-intro"></p>
 
-    <div class="count" id="count">Loading...</div>
-
-    <button id="load">Load log</button>
-    <button id="copy">Copy to clipboard</button>
-    <button id="clear">Clear log</button>
-
-    <textarea id="log" readonly placeholder="Press Load log"></textarea>
+    <button type="button" id="log-load" title="Load"></button>
+    <button type="button" id="log-copy" title="Copy"></button>
+    <button type="button" id="log-clear" title="Clear"></button>
+    <div id="log-count"></div>
+    <textarea id="log" readonly title="Raw MIoT log"></textarea>
 
     <script type="text/javascript">
       function onHomeyReady(Homey) {
-        const logEl = document.getElementById('log');
-        const countEl = document.getElementById('count');
+        const __ = (k) => Homey.__('settings.' + k);
 
-        function refresh() {
+        document.getElementById('t-log-title').textContent = __('log_title');
+        document.getElementById('t-log-intro').textContent = __('log_intro');
+        document.getElementById('log-load').textContent = __('load');
+        document.getElementById('log-copy').textContent = __('copy');
+        document.getElementById('log-clear').textContent = __('clear');
+        document.getElementById('log').placeholder = __('log_placeholder');
+
+        const logEl = document.getElementById('log');
+        const logCount = document.getElementById('log-count');
+
+        function refreshLog() {
           Homey.api('GET', '/log', null, (err, result) => {
-            if (err) {
-              countEl.textContent = 'Error: ' + err;
-              return;
-            }
-            countEl.textContent = result.count + ' entries recorded';
+            if (err) { logCount.textContent = err; return; }
+            logCount.textContent = result.count + ' ' + __('lines');
             logEl.value = result.csv;
           });
         }
 
-        document.getElementById('load').addEventListener('click', refresh);
-
-        document.getElementById('copy').addEventListener('click', () => {
+        document.getElementById('log-load').addEventListener('click', refreshLog);
+        document.getElementById('log-copy').addEventListener('click', () => {
           logEl.select();
           document.execCommand('copy');
-          countEl.textContent = 'Copied to clipboard';
+          logCount.textContent = __('copied');
         });
-
-        document.getElementById('clear').addEventListener('click', () => {
-          Homey.confirm('Clear the recorded log?', null, (err, ok) => {
+        document.getElementById('log-clear').addEventListener('click', () => {
+          Homey.confirm(__('confirm_clear_log'), null, (err, ok) => {
             if (!ok) return;
             Homey.api('POST', '/log/clear', null, () => {
               logEl.value = '';
-              countEl.textContent = '0 entries recorded';
+              logCount.textContent = '0 ' + __('lines');
             });
           });
         });
 
-        refresh();
+        refreshLog();
         Homey.ready();
       }
     </script>

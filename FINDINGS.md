@@ -1,6 +1,6 @@
 # X20+ (xiaomi.vacuum.c102gl) — probed facts
 
-Firmware `4.5.6_1087`, probed live over local miIO on 192.168.1.36.
+Firmware `4.5.6_1087`, probed live over local miIO.
 These values come from the robot, not from a spec sheet.
 
 ## Verdict on the two conflicting specs
@@ -152,6 +152,23 @@ Verified against the trigger logic.
 
 If you ever catch a real mid-clean recharge, run `probe.js watch` during it —
 a distinct status value there would allow an explicit "recharging" state.
+
+## Completion trigger (task_completed)
+
+Fires when the robot is back on the dock (status 6 or 13) AND status 1
+(cleaning) was seen this cycle. The "actually cleaned" guard is essential: the
+robot leaves the dock and returns on its own repeatedly at night (10 times in
+one logged night, 60-750s away each), never cleaning - "reached dock" alone
+would spam. Verified against a 15h log: fires once per real clean, never during
+night wandering.
+
+siid 4 piid 1 is a cleaning-progress counter (0..N over the run, holds while
+docked, resets next clean) - candidate for a future progress capability.
+
+KNOWN LIMIT: a mid-clean recharge docks with the flag still set, so it fires
+once early. Needs a real recharge log to separate "docked to recharge" (low
+battery, leaves again) from "docked, done". Today's logs never dropped below
+80%, so the case is still uncaptured.
 
 ## Still open
 

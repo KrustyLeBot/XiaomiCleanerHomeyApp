@@ -3,5 +3,33 @@
   "pair": {
     "bad_token": "Le token doit faire 32 caractères hexadécimaux",
     "no_reply": "Pas de réponse du robot. Vérifie l'IP, et réveille-le dans l'app Xiaomi."
+  },
+  "settings": {
+    "history_title": "Historique des états",
+    "history_intro": "Chaque changement d'état du robot. « flow » = déclenché par une action Homey ; « externe » = bouton du robot, app Xiaomi ou planning (Homey ne peut pas les distinguer, il ne voit que le résultat au prochain relevé).",
+    "log_title": "Journal brut (MIoT)",
+    "log_intro": "Valeurs brutes, pour analyser une recharge en cours de nettoyage. Lance un nettoyage complet, puis exporte et partage le CSV.",
+    "refresh": "Rafraîchir",
+    "clear": "Effacer",
+    "load": "Charger",
+    "copy": "Copier",
+    "copied": "Copié",
+    "loading": "Chargement…",
+    "empty": "Aucun événement pour le moment.",
+    "lines": "lignes",
+    "external": "externe",
+    "confirm_clear_history": "Effacer l'historique ?",
+    "confirm_clear_log": "Effacer le journal brut ?",
+    "log_placeholder": "Appuie sur Charger"
+  },
+  "state": {
+    "cleaning": "Nettoyage en cours",
+    "paused_cleaning": "Nettoyage en pause",
+    "returning": "Retour à la base",
+    "paused_returning": "Retour à la base en pause",
+    "charging": "En charge",
+    "docked": "Sur la base, chargé",
+    "station": "Station en marche",
+    "unknown": "Inconnu"
   }
 }

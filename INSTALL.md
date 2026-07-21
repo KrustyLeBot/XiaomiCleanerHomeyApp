@@ -40,10 +40,8 @@ Without it, read logs from: Homey app -> Apps -> Xiaomi X20+ Vacuum -> Logs.
 
 Homey app -> Devices -> + -> Xiaomi X20+ Vacuum -> Xiaomi Robot Vacuum X20+
 
-It asks for IP and token. Values for this robot are in `.env`:
-
-- IP: `192.168.1.36`
-- Token: 32 hex characters
+It asks for the robot's IP address and its 32-character miIO token. See the
+README for how to extract the token.
 
 Pairing does a real handshake and refuses to create the device if the robot
 does not answer, so a bad IP/token fails immediately rather than silently.

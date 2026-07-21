@@ -14,6 +14,7 @@ class X20PlusDevice extends Homey.Device {
     this.failures = 0;
     this.lastStatus = null;
     this.cleanedThisCycle = false;
+    this.runningArea = 0; // peak area of the in-progress clean
     // What the robot was doing before it paused. The firmware forgets this, so
     // we track it ourselves to label the pause notification.
     this.pausedFrom = null;
@@ -70,10 +71,24 @@ class X20PlusDevice extends Homey.Device {
   }
 
   async update(values) {
-    const { status, battery, paused_from: pausedFromRaw } = values;
+    const { status, battery, paused_from: pausedFromRaw, clean_area: cleanArea } = values;
 
     if (typeof battery === 'number') {
       await this.setCapabilityValue('measure_battery', battery).catch(() => {});
+    }
+
+    // Show the running area only while the robot is working; drop to 0 once it
+    // is idle/docked, so the Insights graph shows a clear bump per clean rather
+    // than holding the last total flat between runs.
+    // KNOWN LIMIT: a mid-clean recharge docks (status 6) and reads as idle, so
+    // the graph drops to 0 there too - one clean shows as two bumps. Same
+    // unresolved case as task_completed; needs a real recharge log.
+    if (typeof cleanArea === 'number') {
+      const area = isActive(status) ? cleanArea : 0;
+      await this.setCapabilityValue('vacuum_clean_area', area).catch(() => {});
+      // Remember the running area so it can be frozen into last_cleaned_area
+      // when the clean finishes (the live value resets to 0 on the next run).
+      if (isActive(status) && cleanArea > 0) this.runningArea = cleanArea;
     }
 
     // Work out the pause context first - the displayed state depends on it.
@@ -104,19 +119,68 @@ class X20PlusDevice extends Homey.Device {
     await this.setCapabilityValue('vacuum_status', state).catch(() => {});
     await this.setCapabilityValue('vacuum_active', isActive(status)).catch(() => {});
 
+    // Drive the hidden boolean "event" capabilities. Homey's native device
+    // Timeline records boolean changes automatically, giving a per-device
+    // history tab - the enum capability alone gets no timeline.
+    await this.updateEventCapabilities(state);
+
     if (!changed || previous === null) return; // first poll: adopt without firing flows
 
     await this.fireTriggers(state, status);
 
     // A clean is finished once the robot is back on the dock after cleaning.
+    // KNOWN LIMIT: if the robot recharges mid-clean, it docks with the flag still
+    // set and fires once early. Reliable for cleans that finish in one run (the
+    // normal case). Needs a real mid-clean-recharge log to tell "docked to
+    // recharge" (low battery, leaves again) from "docked, done". See FINDINGS.md.
     const docked = status === STATUS.DOCKED || status === STATUS.CHARGED;
     if (docked && this.cleanedThisCycle) {
       this.cleanedThisCycle = false;
+
+      // Freeze the area of the clean that just finished. Kept until the next
+      // clean overwrites it, unlike vacuum_clean_area which drops back to 0.
+      if (this.runningArea > 0) {
+        await this.setCapabilityValue('last_cleaned_area', this.runningArea).catch(() => {});
+        this.runningArea = 0;
+      }
+
+      await this.pulseEvent('evt_completed');
       await this.homey.flow
         .getDeviceTriggerCard('task_completed')
         .trigger(this, { battery: this.getCapabilityValue('measure_battery') || 0 })
         .catch(this.error);
     }
+  }
+
+  // One boolean per display state - the full set, so every state shows on the
+  // native timeline. true while in the state, false otherwise, so each entry
+  // marks when the state began and ended.
+  static STATE_EVENT = {
+    cleaning: 'evt_cleaning',
+    paused_cleaning: 'evt_paused_cleaning',
+    returning: 'evt_returning',
+    paused_returning: 'evt_paused_returning',
+    charging: 'evt_charging',
+    docked: 'evt_docked',
+    station: 'evt_station',
+    unknown: 'evt_unknown',
+  };
+
+  async updateEventCapabilities(state) {
+    const active = X20PlusDevice.STATE_EVENT[state];
+    for (const cap of Object.values(X20PlusDevice.STATE_EVENT)) {
+      const value = cap === active;
+      if (this.getCapabilityValue(cap) !== value) {
+        await this.setCapabilityValue(cap, value).catch(() => {});
+      }
+    }
+  }
+
+  // A momentary event (no lasting state): flip true then back to false so the
+  // timeline gets a single mark.
+  async pulseEvent(cap) {
+    await this.setCapabilityValue(cap, true).catch(() => {});
+    this.homey.setTimeout(() => this.setCapabilityValue(cap, false).catch(() => {}), 1000);
   }
 
   async fireTriggers(state, status) {
@@ -142,22 +206,26 @@ class X20PlusDevice extends Homey.Device {
 
   // --- actions ---
 
+  async runAction(action) {
+    await this.client.action(action.siid, action.aiid);
+  }
+
   // Same MIoT action as resumeCleaning: from the dock it starts a new job,
   // from a paused clean it continues. Exposed separately so flows read clearly.
   async startCleaning() {
-    await this.client.action(ACTIONS.clean.siid, ACTIONS.clean.aiid);
+    await this.runAction(ACTIONS.clean);
   }
 
   async resumeCleaning() {
-    await this.client.action(ACTIONS.clean.siid, ACTIONS.clean.aiid);
+    await this.runAction(ACTIONS.clean);
   }
 
   async resumeReturning() {
-    await this.client.action(ACTIONS.home.siid, ACTIONS.home.aiid);
+    await this.runAction(ACTIONS.home);
   }
 
   async pause() {
-    await this.client.action(ACTIONS.pause.siid, ACTIONS.pause.aiid);
+    await this.runAction(ACTIONS.pause);
   }
 
   // --- log export (used by the app settings page) ---

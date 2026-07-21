@@ -9,6 +9,7 @@ const PROPERTIES = [
   { did: 'charging', siid: 3, piid: 2 },
   { did: 'battery', siid: 3, piid: 1 },
   { did: 'paused_from', siid: 4, piid: 3 },
+  { did: 'clean_area', siid: 4, piid: 1 }, // cleaned area, climbs during a run
 ];
 
 // siid 4 piid 3 says what the robot was doing when it paused. Observed live:

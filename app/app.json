@@ -103,6 +103,138 @@
       "getable": true,
       "setable": false,
       "uiComponent": "sensor"
+    },
+    "vacuum_clean_area": {
+      "type": "number",
+      "title": {
+        "en": "Currently cleaned area",
+        "fr": "Surface nettoyée en cours"
+      },
+      "units": {
+        "en": "m²",
+        "fr": "m²"
+      },
+      "decimals": 0,
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "insights": true,
+      "icon": "/assets/icon.svg"
+    },
+    "evt_cleaning": {
+      "type": "boolean",
+      "title": {
+        "en": "Cleaning",
+        "fr": "Nettoyage en cours"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_paused_cleaning": {
+      "type": "boolean",
+      "title": {
+        "en": "Cleaning paused",
+        "fr": "Nettoyage en pause"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_returning": {
+      "type": "boolean",
+      "title": {
+        "en": "Returning to dock",
+        "fr": "Retour à la base"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_paused_returning": {
+      "type": "boolean",
+      "title": {
+        "en": "Return to dock paused",
+        "fr": "Retour à la base en pause"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_docked": {
+      "type": "boolean",
+      "title": {
+        "en": "Docked, charged",
+        "fr": "Sur la base, chargé"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_completed": {
+      "type": "boolean",
+      "title": {
+        "en": "Cleaning finished",
+        "fr": "Nettoyage terminé"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_charging": {
+      "type": "boolean",
+      "title": {
+        "en": "Charging",
+        "fr": "En charge"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_station": {
+      "type": "boolean",
+      "title": {
+        "en": "Station working",
+        "fr": "Station en marche"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_unknown": {
+      "type": "boolean",
+      "title": {
+        "en": "Unknown",
+        "fr": "Inconnu"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "last_cleaned_area": {
+      "type": "number",
+      "title": {
+        "en": "Last cleaned area",
+        "fr": "Dernière surface nettoyée"
+      },
+      "units": {
+        "en": "m²",
+        "fr": "m²"
+      },
+      "decimals": 0,
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "insights": true
     }
   },
   "drivers": [
@@ -116,7 +248,18 @@
       "capabilities": [
         "vacuum_status",
         "vacuum_active",
-        "measure_battery"
+        "measure_battery",
+        "vacuum_clean_area",
+        "last_cleaned_area",
+        "evt_cleaning",
+        "evt_paused_cleaning",
+        "evt_returning",
+        "evt_paused_returning",
+        "evt_docked",
+        "evt_completed",
+        "evt_charging",
+        "evt_station",
+        "evt_unknown"
       ],
       "platforms": [
         "local"

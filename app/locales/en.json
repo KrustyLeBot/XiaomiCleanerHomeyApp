@@ -3,5 +3,33 @@
   "pair": {
     "bad_token": "Token must be 32 hexadecimal characters",
     "no_reply": "No reply from the robot. Check the IP, and wake it in the Xiaomi app."
+  },
+  "settings": {
+    "history_title": "State history",
+    "history_intro": "Every state change of the robot. \"flow\" = triggered by a Homey action; \"external\" = robot button, Xiaomi app or schedule (Homey cannot tell these apart, it only sees the result at the next poll).",
+    "log_title": "Raw log (MIoT)",
+    "log_intro": "Raw values, to analyse a mid-clean recharge. Run a full clean, then export and share the CSV.",
+    "refresh": "Refresh",
+    "clear": "Clear",
+    "load": "Load",
+    "copy": "Copy",
+    "copied": "Copied",
+    "loading": "Loading…",
+    "empty": "No events yet.",
+    "lines": "lines",
+    "external": "external",
+    "confirm_clear_history": "Clear the history?",
+    "confirm_clear_log": "Clear the raw log?",
+    "log_placeholder": "Press Load"
+  },
+  "state": {
+    "cleaning": "Cleaning",
+    "paused_cleaning": "Cleaning paused",
+    "returning": "Returning to dock",
+    "paused_returning": "Return to dock paused",
+    "charging": "Charging",
+    "docked": "Docked, charged",
+    "station": "Station working",
+    "unknown": "Unknown"
   }
 }
