@@ -1,0 +1,7 @@
+{
+  "unreachable": "Robot not responding",
+  "pair": {
+    "bad_token": "Token must be 32 hexadecimal characters",
+    "no_reply": "No reply from the robot. Check the IP, and wake it in the Xiaomi app."
+  }
+}

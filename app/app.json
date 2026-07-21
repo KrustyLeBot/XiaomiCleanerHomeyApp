@@ -1,0 +1,512 @@
+{
+  "id": "com.jerome.xiaomi.x20plus",
+  "version": "1.0.0",
+  "compatibility": ">=5.0.0",
+  "sdk": 3,
+  "platforms": [
+    "local"
+  ],
+  "name": {
+    "en": "Xiaomi X20+ Vacuum",
+    "fr": "Aspirateur Xiaomi X20+"
+  },
+  "description": {
+    "en": "Local control of the Xiaomi Robot Vacuum X20+ with distinct pause states.",
+    "fr": "Contrôle local du Xiaomi Robot Vacuum X20+ avec états de pause distincts."
+  },
+  "category": [
+    "appliances"
+  ],
+  "permissions": [],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png"
+  },
+  "author": {
+    "name": "Jerome"
+  },
+  "capabilities": {
+    "vacuum_status": {
+      "type": "enum",
+      "title": {
+        "en": "Status",
+        "fr": "État"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "values": [
+        {
+          "id": "cleaning",
+          "title": {
+            "en": "Cleaning",
+            "fr": "Nettoyage en cours"
+          }
+        },
+        {
+          "id": "paused_cleaning",
+          "title": {
+            "en": "Cleaning paused",
+            "fr": "Nettoyage en pause"
+          }
+        },
+        {
+          "id": "returning",
+          "title": {
+            "en": "Returning to dock",
+            "fr": "Retour à la base"
+          }
+        },
+        {
+          "id": "paused_returning",
+          "title": {
+            "en": "Return to dock paused",
+            "fr": "Retour à la base en pause"
+          }
+        },
+        {
+          "id": "charging",
+          "title": {
+            "en": "Charging",
+            "fr": "En charge"
+          }
+        },
+        {
+          "id": "docked",
+          "title": {
+            "en": "Docked, charged",
+            "fr": "Sur la base, chargé"
+          }
+        },
+        {
+          "id": "station",
+          "title": {
+            "en": "Station working",
+            "fr": "Station en marche"
+          }
+        },
+        {
+          "id": "unknown",
+          "title": {
+            "en": "Unknown",
+            "fr": "Inconnu"
+          }
+        }
+      ]
+    },
+    "vacuum_active": {
+      "type": "boolean",
+      "title": {
+        "en": "Job in progress",
+        "fr": "Tâche en cours"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor"
+    }
+  },
+  "drivers": [
+    {
+      "id": "x20plus",
+      "name": {
+        "en": "Xiaomi Robot Vacuum X20+",
+        "fr": "Xiaomi Robot Vacuum X20+"
+      },
+      "class": "other",
+      "capabilities": [
+        "vacuum_status",
+        "vacuum_active",
+        "measure_battery"
+      ],
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "lan"
+      ],
+      "images": {
+        "small": "/drivers/x20plus/assets/images/small.png",
+        "large": "/drivers/x20plus/assets/images/large.png"
+      },
+      "pair": [
+        {
+          "id": "configure"
+        }
+      ],
+      "settings": [
+        {
+          "id": "address",
+          "type": "text",
+          "label": {
+            "en": "IP address",
+            "fr": "Adresse IP"
+          },
+          "value": ""
+        },
+        {
+          "id": "token",
+          "type": "text",
+          "label": {
+            "en": "Token",
+            "fr": "Token"
+          },
+          "value": ""
+        },
+        {
+          "id": "poll_interval",
+          "type": "number",
+          "label": {
+            "en": "Poll interval (seconds)",
+            "fr": "Fréquence de lecture (secondes)"
+          },
+          "hint": {
+            "en": "How often the robot is read. Lower = faster notifications, more network traffic.",
+            "fr": "Fréquence de lecture du robot. Plus bas = notifications plus rapides, plus de trafic réseau."
+          },
+          "value": 10,
+          "min": 5,
+          "max": 300,
+          "units": {
+            "en": "s",
+            "fr": "s"
+          }
+        },
+        {
+          "id": "logging",
+          "type": "checkbox",
+          "label": {
+            "en": "Record log",
+            "fr": "Enregistrer le journal"
+          },
+          "hint": {
+            "en": "Records raw robot values so a mid-clean recharge can be analysed. Export from the app settings.",
+            "fr": "Enregistre les valeurs brutes du robot pour analyser une recharge en cours de nettoyage. Export depuis les réglages de l app."
+          },
+          "value": true
+        }
+      ],
+      "energy": {
+        "batteries": [
+          "INTERNAL"
+        ]
+      }
+    }
+  ],
+  "flow": {
+    "triggers": [
+      {
+        "id": "paused_cleaning",
+        "title": {
+          "en": "Cleaning was interrupted",
+          "fr": "Le nettoyage a été interrompu"
+        },
+        "hint": {
+          "en": "The robot paused while cleaning. Resume with 'Resume cleaning'.",
+          "fr": "Le robot s'est arrêté pendant le nettoyage. Reprendre avec « Reprendre le nettoyage »."
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "battery",
+            "type": "number",
+            "title": {
+              "en": "Battery",
+              "fr": "Batterie"
+            }
+          }
+        ]
+      },
+      {
+        "id": "paused_returning",
+        "title": {
+          "en": "Return to dock was interrupted",
+          "fr": "Le retour à la base a été interrompu"
+        },
+        "hint": {
+          "en": "The robot paused on its way home. Resume with 'Resume return to dock' - never with 'Resume cleaning', which would start a new full clean.",
+          "fr": "Le robot s'est arrêté en rentrant. Reprendre avec « Reprendre le retour à la base » - jamais avec « Reprendre le nettoyage », qui lancerait un nettoyage complet."
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "battery",
+            "type": "number",
+            "title": {
+              "en": "Battery",
+              "fr": "Batterie"
+            }
+          }
+        ]
+      },
+      {
+        "id": "status_changed",
+        "title": {
+          "en": "Status changed",
+          "fr": "L'état a changé"
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "status",
+            "type": "string",
+            "title": {
+              "en": "Status",
+              "fr": "État"
+            }
+          },
+          {
+            "name": "battery",
+            "type": "number",
+            "title": {
+              "en": "Battery",
+              "fr": "Batterie"
+            }
+          }
+        ]
+      },
+      {
+        "id": "task_completed",
+        "title": {
+          "en": "Cleaning finished",
+          "fr": "Nettoyage terminé"
+        },
+        "hint": {
+          "en": "Fires when the robot returns to the dock after actually cleaning. Does not fire when it just moves around without cleaning.",
+          "fr": "Se déclenche quand le robot rentre à la base après avoir réellement nettoyé. Ne se déclenche pas s il se déplace sans nettoyer."
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "battery",
+            "type": "number",
+            "title": {
+              "en": "Battery",
+              "fr": "Batterie"
+            }
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "id": "is_paused_from",
+        "title": {
+          "en": "Robot was !{{|not}} interrupted while...",
+          "fr": "Le robot !{{a|n'a pas}} été interrompu pendant..."
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          },
+          {
+            "name": "reason",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "cleaning",
+                "title": {
+                  "en": "cleaning",
+                  "fr": "le nettoyage"
+                }
+              },
+              {
+                "id": "returning",
+                "title": {
+                  "en": "returning to dock",
+                  "fr": "le retour à la base"
+                }
+              }
+            ]
+          }
+        ],
+        "titleFormatted": {
+          "en": "Robot was !{{|not}} interrupted while [[reason]]",
+          "fr": "Le robot !{{a|n'a pas}} été interrompu pendant [[reason]]"
+        }
+      },
+      {
+        "id": "status_is",
+        "title": {
+          "en": "Status !{{is|is not}}",
+          "fr": "L'état !{{est|n'est pas}}"
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          },
+          {
+            "name": "status",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "cleaning",
+                "title": {
+                  "en": "Cleaning",
+                  "fr": "Nettoyage en cours"
+                }
+              },
+              {
+                "id": "paused_cleaning",
+                "title": {
+                  "en": "Cleaning paused",
+                  "fr": "Nettoyage en pause"
+                }
+              },
+              {
+                "id": "returning",
+                "title": {
+                  "en": "Returning to dock",
+                  "fr": "Retour à la base"
+                }
+              },
+              {
+                "id": "paused_returning",
+                "title": {
+                  "en": "Return to dock paused",
+                  "fr": "Retour à la base en pause"
+                }
+              },
+              {
+                "id": "charging",
+                "title": {
+                  "en": "Charging",
+                  "fr": "En charge"
+                }
+              },
+              {
+                "id": "docked",
+                "title": {
+                  "en": "Docked, charged",
+                  "fr": "Sur la base, chargé"
+                }
+              },
+              {
+                "id": "station",
+                "title": {
+                  "en": "Station working",
+                  "fr": "Station en marche"
+                }
+              },
+              {
+                "id": "unknown",
+                "title": {
+                  "en": "Unknown",
+                  "fr": "Inconnu"
+                }
+              }
+            ]
+          }
+        ],
+        "titleFormatted": {
+          "en": "Status !{{is|is not}} [[status]]",
+          "fr": "L'état !{{est|n'est pas}} [[status]]"
+        }
+      }
+    ],
+    "actions": [
+      {
+        "id": "start_cleaning",
+        "title": {
+          "en": "Start cleaning",
+          "fr": "Démarrer le nettoyage"
+        },
+        "hint": {
+          "en": "Starts a full clean from the dock.",
+          "fr": "Lance un nettoyage complet depuis la base."
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ]
+      },
+      {
+        "id": "resume_cleaning",
+        "title": {
+          "en": "Resume cleaning",
+          "fr": "Reprendre le nettoyage"
+        },
+        "hint": {
+          "en": "Only use when the robot was interrupted while cleaning. If it was returning to dock, this starts a new full clean instead.",
+          "fr": "À utiliser uniquement si le robot a été interrompu pendant le nettoyage. S'il rentrait à la base, ceci lance un nouveau nettoyage complet."
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ]
+      },
+      {
+        "id": "resume_returning",
+        "title": {
+          "en": "Resume return to dock",
+          "fr": "Reprendre le retour à la base"
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ]
+      },
+      {
+        "id": "pause",
+        "title": {
+          "en": "Pause",
+          "fr": "Mettre en pause"
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=x20plus"
+          }
+        ]
+      }
+    ]
+  },
+  "api": {
+    "getLog": {
+      "method": "GET",
+      "path": "/log"
+    },
+    "clearLog": {
+      "method": "POST",
+      "path": "/log/clear"
+    }
+  },
+  "brandColor": "#FF6900"
+}

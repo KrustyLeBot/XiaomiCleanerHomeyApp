@@ -1,0 +1,6 @@
+# Secrets - contains the robot's miIO token
+.env
+
+node_modules/
+.homeybuild/
+*.log

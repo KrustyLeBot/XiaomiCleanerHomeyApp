@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
+    <style>
+      body { font-family: sans-serif; padding: 16px; }
+      h2 { margin-top: 0; }
+      p { color: #444; line-height: 1.5; }
+      button { padding: 10px 16px; margin-right: 8px; margin-bottom: 12px; }
+      textarea {
+        width: 100%;
+        height: 320px;
+        font-family: monospace;
+        font-size: 11px;
+        box-sizing: border-box;
+      }
+      .count { font-weight: 600; margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <h2>Robot log</h2>
+    <p>
+      Raw MIoT values, recorded whenever they change. Useful to capture a
+      mid-clean recharge: run a full clean until the robot goes back to charge on
+      its own, then export and share the CSV.
+    </p>
+
+    <div class="count" id="count">Loading...</div>
+
+    <button id="load">Load log</button>
+    <button id="copy">Copy to clipboard</button>
+    <button id="clear">Clear log</button>
+
+    <textarea id="log" readonly placeholder="Press Load log"></textarea>
+
+    <script type="text/javascript">
+      function onHomeyReady(Homey) {
+        const logEl = document.getElementById('log');
+        const countEl = document.getElementById('count');
+
+        function refresh() {
+          Homey.api('GET', '/log', null, (err, result) => {
+            if (err) {
+              countEl.textContent = 'Error: ' + err;
+              return;
+            }
+            countEl.textContent = result.count + ' entries recorded';
+            logEl.value = result.csv;
+          });
+        }
+
+        document.getElementById('load').addEventListener('click', refresh);
+
+        document.getElementById('copy').addEventListener('click', () => {
+          logEl.select();
+          document.execCommand('copy');
+          countEl.textContent = 'Copied to clipboard';
+        });
+
+        document.getElementById('clear').addEventListener('click', () => {
+          Homey.confirm('Clear the recorded log?', null, (err, ok) => {
+            if (!ok) return;
+            Homey.api('POST', '/log/clear', null, () => {
+              logEl.value = '';
+              countEl.textContent = '0 entries recorded';
+            });
+          });
+        });
+
+        refresh();
+        Homey.ready();
+      }
+    </script>
+  </body>
+</html>
