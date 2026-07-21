@@ -20,7 +20,9 @@
     "external": "externe",
     "confirm_clear_history": "Effacer l'historique ?",
     "confirm_clear_log": "Effacer le journal brut ?",
-    "log_placeholder": "Appuie sur Charger"
+    "log_placeholder": "Appuie sur Charger",
+    "err_title": "Erreurs",
+    "err_empty": "Aucune erreur."
   },
   "state": {
     "cleaning": "Nettoyage en cours",

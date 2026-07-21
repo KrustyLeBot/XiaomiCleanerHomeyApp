@@ -24,9 +24,33 @@
         box-sizing: border-box;
       }
       #log-count { font-size: 13px; margin-bottom: 8px; }
+      .errbox {
+        border: 1px solid #e0b4b4;
+        background: #fff6f6;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        min-height: 20px;
+      }
+      .errbox .empty { color: #999; }
+      .errrow {
+        font-family: monospace;
+        font-size: 12px;
+        padding: 3px 0;
+        border-bottom: 1px solid #f0dede;
+      }
+      .errrow:last-child { border-bottom: none; }
+      .errrow .t { color: #999; }
+      .errrow .msg { color: #b03030; }
+      .errrow .ok { color: #2e7d32; }
     </style>
   </head>
   <body>
+    <h2 id="t-err-title"></h2>
+    <button type="button" id="err-refresh" title="Refresh"></button>
+    <button type="button" id="err-clear" title="Clear"></button>
+    <div class="errbox" id="errors"><span class="empty" id="t-err-empty"></span></div>
+
     <h2 id="t-log-title"></h2>
     <p id="t-log-intro"></p>
 
@@ -40,12 +64,51 @@
       function onHomeyReady(Homey) {
         const __ = (k) => Homey.__('settings.' + k);
 
+        document.getElementById('t-err-title').textContent = __('err_title');
+        document.getElementById('t-err-empty').textContent = __('err_empty');
+        document.getElementById('err-refresh').textContent = __('refresh');
+        document.getElementById('err-clear').textContent = __('clear');
         document.getElementById('t-log-title').textContent = __('log_title');
         document.getElementById('t-log-intro').textContent = __('log_intro');
         document.getElementById('log-load').textContent = __('load');
         document.getElementById('log-copy').textContent = __('copy');
         document.getElementById('log-clear').textContent = __('clear');
         document.getElementById('log').placeholder = __('log_placeholder');
+
+        // --- error log ---
+        const errBox = document.getElementById('errors');
+
+        function fmtTime(t) {
+          return new Date(t).toLocaleString(undefined, {
+            day: '2-digit', month: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+          });
+        }
+
+        function refreshErrors() {
+          Homey.api('GET', '/errors', null, (err, result) => {
+            if (err) { errBox.textContent = err; return; }
+            const entries = (result && result.entries) || [];
+            if (!entries.length) {
+              errBox.innerHTML = '<span class="empty">' + __('err_empty') + '</span>';
+              return;
+            }
+            errBox.innerHTML = entries
+              .map((e) => {
+                const cls = e.message === 'ok' || e.message === 'yes' ? 'ok' : 'msg';
+                return (
+                  '<div class="errrow"><span class="t">' + fmtTime(e.t) + '</span> ' +
+                  e.context + ' &rarr; <span class="' + cls + '">' + e.message + '</span></div>'
+                );
+              })
+              .join('');
+          });
+        }
+
+        document.getElementById('err-refresh').addEventListener('click', refreshErrors);
+        document.getElementById('err-clear').addEventListener('click', () => {
+          Homey.api('POST', '/errors/clear', null, refreshErrors);
+        });
 
         const logEl = document.getElementById('log');
         const logCount = document.getElementById('log-count');
@@ -74,6 +137,7 @@
           });
         });
 
+        refreshErrors();
         refreshLog();
         Homey.ready();
       }

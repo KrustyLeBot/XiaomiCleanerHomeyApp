@@ -4,6 +4,7 @@ const Homey = require('homey');
 const MiioClient = require('../../lib/miio-client');
 const { ACTIONS, STATUS, STATE_NAMES, toState, isActive } = require('../../lib/x20plus');
 const { Recorder, WATCHED } = require('../../lib/recorder');
+const errlog = require('../../lib/errlog');
 
 const DEFAULT_POLL_SECONDS = 10;
 const FAILURES_BEFORE_UNAVAILABLE = 3; // the robot ignores reads while asleep
@@ -13,11 +14,14 @@ class X20PlusDevice extends Homey.Device {
   async onInit() {
     this.failures = 0;
     this.lastStatus = null;
+    this.lastState = null; // last displayed state, for timeline toggling
     this.cleanedThisCycle = false;
     this.runningArea = 0; // peak area of the in-progress clean
-    // What the robot was doing before it paused. The firmware forgets this, so
-    // we track it ourselves to label the pause notification.
-    this.pausedFrom = null;
+
+    // Devices paired before a capability was added keep their old capability
+    // list (Homey caches it at pairing). Add any missing ones so new features
+    // appear without the user having to remove and re-pair the device.
+    await this.migrateCapabilities();
 
     this.recorder = new Recorder(this);
 
@@ -25,6 +29,25 @@ class X20PlusDevice extends Homey.Device {
     this.poll();
     this.startPolling();
     this.flushTimer = this.homey.setInterval(() => this.recorder.flush(), FLUSH_INTERVAL);
+  }
+
+  async migrateCapabilities() {
+    // The driver's manifest carries the up-to-date capability list from app.json;
+    // an old paired device may be missing the newer ones. addCapability inherits
+    // the capability definition (units/decimals) from the manifest.
+    const manifest = this.driver.manifest || {};
+    const wanted = manifest.capabilities || [];
+
+    for (const cap of wanted) {
+      if (!this.hasCapability(cap)) {
+        try {
+          await this.addCapability(cap);
+        } catch (err) {
+          this.error(`addCapability ${cap}`, err);
+          errlog.add(`addCapability ${cap}`, err);
+        }
+      }
+    }
   }
 
   startPolling() {
@@ -71,7 +94,13 @@ class X20PlusDevice extends Homey.Device {
   }
 
   async update(values) {
-    const { status, battery, paused_from: pausedFromRaw, clean_area: cleanArea } = values;
+    // The poll uses the recorder's WATCHED set, where fields carry raw dids:
+    // status=s2p1? no - status/battery keep names, but area is s4p1 and the
+    // pause field is s4p3. Map them here so the rest reads clearly.
+    const status = values.status;
+    const battery = values.battery;
+    const pausedFromRaw = values.s4p3;
+    const cleanArea = values.s4p1;
 
     if (typeof battery === 'number') {
       await this.setCapabilityValue('measure_battery', battery).catch(() => {});
@@ -85,28 +114,32 @@ class X20PlusDevice extends Homey.Device {
     // unresolved case as task_completed; needs a real recharge log.
     if (typeof cleanArea === 'number') {
       const area = isActive(status) ? cleanArea : 0;
-      await this.setCapabilityValue('vacuum_clean_area', area).catch(() => {});
-      // Remember the running area so it can be frozen into last_cleaned_area
-      // when the clean finishes (the live value resets to 0 on the next run).
-      if (isActive(status) && cleanArea > 0) this.runningArea = cleanArea;
+      // Log write failures instead of swallowing them, so a broken capability
+      // shows up in the app logs rather than a silent "-" on the tile.
+      await this.setCapabilityValue('vacuum_clean_area', area).catch((err) => {
+        this.error('set vacuum_clean_area', err);
+        errlog.add(`set vacuum_clean_area=${area}`, err);
+      });
+
+      // Freeze last_cleaned_area on the active -> idle transition, using the
+      // last non-zero running value. This does NOT depend on having seen the
+      // clean start (cleanedThisCycle), so it survives an app restart that
+      // happens mid-clean. runningArea holds the peak while active; when the
+      // robot goes idle with a value > 0, that was a real clean that just ended.
+      if (isActive(status)) {
+        if (cleanArea > 0) this.runningArea = cleanArea;
+      } else if (this.runningArea > 0) {
+        await this.setCapabilityValue('last_cleaned_area', this.runningArea).catch((err) => {
+          this.error('set last_cleaned_area', err);
+          errlog.add(`set last_cleaned_area=${this.runningArea}`, err);
+        });
+        this.runningArea = 0;
+      }
     }
 
-    // Work out the pause context first - the displayed state depends on it.
     const changed = status !== this.lastStatus;
     const previous = this.lastStatus;
-
-    if (changed) {
-      if (status === STATUS.PAUSED) {
-        // Keep an existing reason on restart: previous is null then, and
-        // guessing "cleaning" would mislabel a paused dock-return.
-        if (previous !== null) {
-          this.pausedFrom = previous === STATUS.RETURNING ? 'returning' : 'cleaning';
-        }
-      } else {
-        this.pausedFrom = null;
-      }
-      this.lastStatus = status;
-    }
+    if (changed) this.lastStatus = status;
 
     // Track whether a real clean happened this cycle. The robot leaves the dock
     // and returns on its own (observed at night, battery full, never cleaning),
@@ -115,14 +148,17 @@ class X20PlusDevice extends Homey.Device {
       this.cleanedThisCycle = true;
     }
 
-    const state = toState(status, pausedFromRaw, this.pausedFrom);
+    const state = toState(status, pausedFromRaw);
     await this.setCapabilityValue('vacuum_status', state).catch(() => {});
     await this.setCapabilityValue('vacuum_active', isActive(status)).catch(() => {});
 
-    // Drive the hidden boolean "event" capabilities. Homey's native device
-    // Timeline records boolean changes automatically, giving a per-device
-    // history tab - the enum capability alone gets no timeline.
-    await this.updateEventCapabilities(state);
+    // Toggle the timeline boolean ONLY when the displayed state actually changes.
+    // Doing it every poll would spam the history with the same state on a loop.
+    // Tracks state (not raw status): a pause can shift cleaning<->returning while
+    // the raw status stays 3.
+    const stateChanged = state !== this.lastState;
+    this.lastState = state;
+    if (stateChanged) await this.updateEventCapabilities(state);
 
     if (!changed || previous === null) return; // first poll: adopt without firing flows
 
@@ -133,18 +169,14 @@ class X20PlusDevice extends Homey.Device {
     // set and fires once early. Reliable for cleans that finish in one run (the
     // normal case). Needs a real mid-clean-recharge log to tell "docked to
     // recharge" (low battery, leaves again) from "docked, done". See FINDINGS.md.
+    // task_completed keeps the cleanedThisCycle guard (must have seen status 1
+    // this cycle) so it does NOT fire on the robot's nightly dock wandering.
+    // last_cleaned_area is frozen separately above, on the active->idle edge,
+    // so it survives an app restart mid-clean where this guard would miss.
     const docked = status === STATUS.DOCKED || status === STATUS.CHARGED;
     if (docked && this.cleanedThisCycle) {
       this.cleanedThisCycle = false;
-
-      // Freeze the area of the clean that just finished. Kept until the next
-      // clean overwrites it, unlike vacuum_clean_area which drops back to 0.
-      if (this.runningArea > 0) {
-        await this.setCapabilityValue('last_cleaned_area', this.runningArea).catch(() => {});
-        this.runningArea = 0;
-      }
-
-      await this.pulseEvent('evt_completed');
+      await this.toggleEvent('evt_completed');
       await this.homey.flow
         .getDeviceTriggerCard('task_completed')
         .trigger(this, { battery: this.getCapabilityValue('measure_battery') || 0 })
@@ -152,9 +184,10 @@ class X20PlusDevice extends Homey.Device {
     }
   }
 
-  // One boolean per display state - the full set, so every state shows on the
-  // native timeline. true while in the state, false otherwise, so each entry
-  // marks when the state began and ended.
+  // One boolean per display state. Each is a momentary EVENT marker, not a
+  // sustained state: entering a state pulses only that one boolean. The others
+  // are left untouched, because setting a boolean back to false ALSO creates a
+  // timeline entry - which was logging a phantom "started" event on every exit.
   static STATE_EVENT = {
     cleaning: 'evt_cleaning',
     paused_cleaning: 'evt_paused_cleaning',
@@ -166,21 +199,18 @@ class X20PlusDevice extends Homey.Device {
     unknown: 'evt_unknown',
   };
 
+  // Toggle only the entered state's boolean. The value is meaningless - it is
+  // just a marker - so flipping it (true<->false) is a single change, and a
+  // single change is one timeline entry. The other booleans are never touched,
+  // so no exit ever logs a phantom event.
   async updateEventCapabilities(state) {
-    const active = X20PlusDevice.STATE_EVENT[state];
-    for (const cap of Object.values(X20PlusDevice.STATE_EVENT)) {
-      const value = cap === active;
-      if (this.getCapabilityValue(cap) !== value) {
-        await this.setCapabilityValue(cap, value).catch(() => {});
-      }
-    }
+    const cap = X20PlusDevice.STATE_EVENT[state];
+    if (cap) await this.toggleEvent(cap);
   }
 
-  // A momentary event (no lasting state): flip true then back to false so the
-  // timeline gets a single mark.
-  async pulseEvent(cap) {
-    await this.setCapabilityValue(cap, true).catch(() => {});
-    this.homey.setTimeout(() => this.setCapabilityValue(cap, false).catch(() => {}), 1000);
+  async toggleEvent(cap) {
+    const next = !this.getCapabilityValue(cap);
+    await this.setCapabilityValue(cap, next).catch(() => {});
   }
 
   async fireTriggers(state, status) {

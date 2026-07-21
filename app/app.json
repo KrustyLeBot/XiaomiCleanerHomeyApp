@@ -649,6 +649,14 @@
     "clearLog": {
       "method": "POST",
       "path": "/log/clear"
+    },
+    "getErrors": {
+      "method": "GET",
+      "path": "/errors"
+    },
+    "clearErrors": {
+      "method": "POST",
+      "path": "/errors/clear"
     }
   },
   "brandColor": "#FF6900"

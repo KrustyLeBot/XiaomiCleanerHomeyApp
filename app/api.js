@@ -2,6 +2,8 @@
 
 // Endpoints backing the settings page, so the log can be exported from Homey.
 
+const errlog = require('./lib/errlog');
+
 function getDevices(homey) {
   return homey.app.homey.drivers.getDriver('x20plus').getDevices();
 }
@@ -19,6 +21,15 @@ module.exports = {
     for (const device of getDevices(homey)) {
       await device.clearLog();
     }
+    return { ok: true };
+  },
+
+  async getErrors() {
+    return { entries: errlog.list() };
+  },
+
+  async clearErrors() {
+    errlog.clear();
     return { ok: true };
   },
 };

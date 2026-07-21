@@ -42,20 +42,21 @@ const CHARGING = {
 };
 
 // User-facing state. The robot reports a single "paused" (3) whether it was
-// cleaning or driving home, so pausedFrom - tracked by the device from the
-// previous status - is what splits it into the two states that matter.
-function toState(status, pausedFromRaw, pausedFromTracked) {
+// cleaning or driving home; siid 4 piid 3 (pausedFromRaw) says which, so the
+// two paused states are read straight from the robot with no local tracking.
+function toState(status, pausedFromRaw) {
   switch (status) {
     case STATUS.CLEANING:
       return 'cleaning';
     case STATUS.RETURNING:
       return 'returning';
     case STATUS.PAUSED:
-      // Prefer what the robot reports; fall back to the tracked previous
-      // status only if the field is missing or carries an unseen value.
-      if (pausedFromRaw === PAUSED_FROM.RETURNING) return 'paused_returning';
-      if (pausedFromRaw === PAUSED_FROM.CLEANING) return 'paused_cleaning';
-      return pausedFromTracked === 'returning' ? 'paused_returning' : 'paused_cleaning';
+      // The robot reports what it was doing directly (siid 4 piid 3), always
+      // observed as 6 (cleaning) or 11 (returning) - no local fallback needed.
+      // An unseen value defaults to paused_cleaning only for display; the
+      // resume actions are separate cards the user picks, so this default never
+      // decides which task gets resumed.
+      return pausedFromRaw === PAUSED_FROM.RETURNING ? 'paused_returning' : 'paused_cleaning';
     case STATUS.DOCKED:
       return 'charging';
     case STATUS.CHARGED:

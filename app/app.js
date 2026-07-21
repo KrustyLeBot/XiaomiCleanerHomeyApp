@@ -29,13 +29,19 @@ class X20PlusApp extends Homey.App {
   }
 
   registerConditions() {
+    // Read the vacuum_status capability, not local vars: it holds the displayed
+    // state, is refreshed every poll, and matches the ids the cards offer.
     this.homey.flow
       .getConditionCard('is_paused_from')
-      .registerRunListener(({ device, reason }) => device.pausedFrom === reason);
+      .registerRunListener(({ device, reason }) => {
+        const state = device.getCapabilityValue('vacuum_status');
+        // reason is 'cleaning' | 'returning'; map to the paused_* state.
+        return state === `paused_${reason}`;
+      });
 
     this.homey.flow
       .getConditionCard('status_is')
-      .registerRunListener(({ device, status }) => String(device.lastStatus) === status);
+      .registerRunListener(({ device, status }) => device.getCapabilityValue('vacuum_status') === status);
   }
 }
 

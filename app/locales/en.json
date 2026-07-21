@@ -20,7 +20,9 @@
     "external": "external",
     "confirm_clear_history": "Clear the history?",
     "confirm_clear_log": "Clear the raw log?",
-    "log_placeholder": "Press Load"
+    "log_placeholder": "Press Load",
+    "err_title": "Errors",
+    "err_empty": "No errors."
   },
   "state": {
     "cleaning": "Cleaning",
