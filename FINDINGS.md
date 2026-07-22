@@ -40,7 +40,7 @@ Confirmed live against the Xiaomi app and by pausing each activity in turn.
 
 | piid | meaning | values |
 |------|---------|--------|
-| 7 | **activity code** | `1` cleaning · `0` returning · `6` paused mid-clean · `11` paused mid-return |
+| 7 | **activity code** | `1` cleaning · `0` returning · `6` paused mid-clean · `11` paused mid-return · `16` blocked mid-return |
 | 3 | **cleaned area, m²** | matches the Xiaomi app exactly (app said 14 m², field read 14) |
 | 2 | **cleaning time, minutes** | app said 17 min, field read 18 |
 | 1 | secondary status enum | `2` cleaning · `3` returning · `6` docked |
@@ -57,6 +57,25 @@ the "paused from" field. It is not - `4/3` is the cleaned area, and it merely
 happened to be 6 m² and 11 m² at those moments. The giveaway: during a single
 uninterrupted clean `4/3` climbs 0 -> 11 -> 18 -> 21, which no activity code
 would do. Verify any such field against the Xiaomi app before trusting it.
+
+## Error state (status 4)
+
+Captured live: the robot hit an obstacle on its way back to the dock and waited
+for the user.
+
+```
+17:23:38  status=5  fault=0   4/7=3    returning normally
+17:23:48  status=4  fault=63  4/7=16   BLOCKED - waiting for the user
+17:24:58  status=5  fault=0   4/7=3    resumed after "resume return to dock"
+```
+
+- `status 4` = blocked / error, the only status where `fault` is non-zero
+- `fault 63` = the error code for this obstacle case
+- `4/7 = 16` = blocked **while returning**, which makes it actionable: the fix is
+  "resume return to dock", not "resume cleaning"
+
+Treated as **active** by the app, so the running area is preserved while the
+robot waits rather than being reset to 0.
 
 ## Status enum (siid 2 piid 1)
 

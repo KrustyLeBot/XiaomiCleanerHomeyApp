@@ -32,6 +32,8 @@
     "charging": "Charging",
     "docked": "Docked, charged",
     "station": "Station working",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "error_returning": "Blocked returning to dock",
+    "error": "Error"
   }
 }

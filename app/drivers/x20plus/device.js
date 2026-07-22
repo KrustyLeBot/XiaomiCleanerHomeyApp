@@ -9,9 +9,9 @@ const errlog = require('../../lib/errlog');
 const DEFAULT_POLL_SECONDS = 10;
 const FAILURES_BEFORE_UNAVAILABLE = 3; // the robot ignores reads while asleep
 const FLUSH_INTERVAL = 60000; // batch store writes rather than one per poll
-// The robot pauses briefly by itself (~30s observed) and resumes unaided, so a
-// pause must persist this long before it is worth notifying about.
-const PAUSE_CONFIRM_DELAY = 90000;
+// The robot stops briefly by itself (~30s observed) and resumes unaided, so a
+// stall must persist this long before it is worth notifying about.
+const STUCK_CONFIRM_DELAY = 90000;
 
 class X20PlusDevice extends Homey.Device {
   async onInit() {
@@ -103,6 +103,9 @@ class X20PlusDevice extends Homey.Device {
     // siid 4 piid 3 = cleaned area in m2, verified against the Xiaomi app
     // (12 m2 there, 12 here). s4p1 is something else and stays near 0.
     const cleanArea = values.s4p3;
+    // Non-zero only in status 4; carried into the error triggers as a token so
+    // the notification can name the actual fault.
+    this.lastFault = values.fault;
 
     if (typeof battery === 'number') {
       await this.setCapabilityValue('measure_battery', battery).catch(() => {});
@@ -166,9 +169,12 @@ class X20PlusDevice extends Homey.Device {
     this.lastState = state;
     if (stateChanged) await this.updateEventCapabilities(state);
 
+    // Must run every poll - see the comment on the method.
+    this.updateStuckNotification(state);
+
     if (!changed || previous === null) return; // first poll: adopt without firing flows
 
-    await this.fireTriggers(state, status);
+    await this.fireTriggers(state);
 
     // A clean is finished once the robot is back on the dock after cleaning.
     // KNOWN LIMIT: if the robot recharges mid-clean, it docks with the flag still
@@ -202,6 +208,8 @@ class X20PlusDevice extends Homey.Device {
     charging: 'evt_charging',
     docked: 'evt_docked',
     station: 'evt_station',
+    error_returning: 'evt_error_returning',
+    error: 'evt_error',
     unknown: 'evt_unknown',
   };
 
@@ -219,7 +227,7 @@ class X20PlusDevice extends Homey.Device {
     await this.setCapabilityValue(cap, next).catch(() => {});
   }
 
-  async fireTriggers(state, status) {
+  async fireTriggers(state) {
     const tokens = {
       status: STATE_NAMES[state] || state,
       battery: this.getCapabilityValue('measure_battery') || 0,
@@ -230,30 +238,49 @@ class X20PlusDevice extends Homey.Device {
       .trigger(this, tokens)
       .catch(this.error);
 
-    // Pause triggers are delayed: the robot pauses briefly on its own (observed
-    // ~30s when it was knocked off the dock and resumed by itself). Firing at
-    // once produced a "resume?" notification for a pause that fixed itself.
-    // The timer is cancelled below as soon as the state stops being a pause.
-    if (state === 'paused_cleaning' || state === 'paused_returning') {
-      // pauseNotified keeps it to one notification per pause episode, however
-      // many polls the pause spans.
-      if (!this.pauseTimer && !this.pauseNotified) {
-        this.pauseTimer = this.homey.setTimeout(() => {
-          this.pauseTimer = null;
-          // Re-check: only notify if still paused in the same way.
-          if (this.getCapabilityValue('vacuum_status') !== state) return;
-          this.pauseNotified = true;
-          this.homey.flow.getDeviceTriggerCard(state).trigger(this, tokens).catch(this.error);
-        }, PAUSE_CONFIRM_DELAY);
+  }
+
+  // States the robot cannot leave on its own, each with a trigger card of the
+  // same name. Errors are included: an obstacle the robot clears by itself
+  // within the confirm delay is not worth a notification either.
+  static STUCK_STATES = ['paused_cleaning', 'paused_returning', 'error_returning', 'error'];
+
+  // Runs on EVERY poll, not only on a state change: fireTriggers is gated on
+  // "status changed", and a stall that started during a missed poll would then
+  // never arm its timer and never notify.
+  updateStuckNotification(state) {
+    if (!X20PlusDevice.STUCK_STATES.includes(state)) {
+      // Moving again: cancel a pending notification and re-arm for next time.
+      if (this.stuckTimer) {
+        this.homey.clearTimeout(this.stuckTimer);
+        this.stuckTimer = null;
       }
-    } else {
-      // Left the pause: cancel a pending notification and re-arm for next time.
-      if (this.pauseTimer) {
-        this.homey.clearTimeout(this.pauseTimer);
-        this.pauseTimer = null;
-      }
-      this.pauseNotified = false;
+      this.stuckNotified = false;
+      return;
     }
+
+    // Delay the notification: the robot stops briefly on its own (~30s when
+    // knocked off its dock) and resumes unaided. stuckNotified keeps it to one
+    // notification per episode, however many polls it spans.
+    if (this.stuckTimer || this.stuckNotified) return;
+
+    this.stuckTimer = this.homey.setTimeout(() => {
+      this.stuckTimer = null;
+      // Re-check: only notify if still stuck in the same way. A robot that moved
+      // from paused_cleaning to error meanwhile gets the error card on the next
+      // poll instead, since stuckNotified is still false.
+      if (this.getCapabilityValue('vacuum_status') !== state) return;
+      this.stuckNotified = true;
+      // All four stuck states count as active, so vacuum_clean_area still holds
+      // the live area rather than the forced 0 of an idle robot.
+      const tokens = {
+        status: STATE_NAMES[state] || state,
+        battery: this.getCapabilityValue('measure_battery') || 0,
+        fault: this.lastFault || 0,
+        area: this.getCapabilityValue('vacuum_clean_area') || this.runningArea || 0,
+      };
+      this.homey.flow.getDeviceTriggerCard(state).trigger(this, tokens).catch(this.error);
+    }, STUCK_CONFIRM_DELAY);
 
     // No "cleaning complete" trigger: this firmware exposes no job-pending flag,
     // so a mid-clean recharge is indistinguishable from a finished job. Any such
@@ -301,7 +328,7 @@ class X20PlusDevice extends Homey.Device {
   async onDeleted() {
     if (this.pollTimer) this.homey.clearInterval(this.pollTimer);
     if (this.flushTimer) this.homey.clearInterval(this.flushTimer);
-    if (this.pauseTimer) this.homey.clearTimeout(this.pauseTimer);
+    if (this.stuckTimer) this.homey.clearTimeout(this.stuckTimer);
     await this.recorder.flush();
     if (this.client) this.client.destroy();
   }

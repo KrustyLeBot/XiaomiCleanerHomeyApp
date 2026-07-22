@@ -19,6 +19,7 @@ const PROPERTIES = [
 const PAUSED_FROM = {
   CLEANING: 6,
   RETURNING: 11,
+  ERROR_RETURNING: 16, // blocked by an obstacle on the way back to the dock
 };
 
 const ACTIONS = {
@@ -30,6 +31,7 @@ const ACTIONS = {
 const STATUS = {
   CLEANING: 1,
   PAUSED: 3,
+  ERROR: 4, // blocked and waiting for the user (fault != 0)
   RETURNING: 5,
   DOCKED: 6, // on the dock, still charging
   CHARGED: 13, // on the dock, battery full - resting state
@@ -56,6 +58,10 @@ function toState(status, pausedFromRaw) {
       // reads as paused_cleaning (display only - the two resume actions are
       // separate cards the user picks, so this never resumes the wrong task).
       return pausedFromRaw === PAUSED_FROM.RETURNING ? 'paused_returning' : 'paused_cleaning';
+    case STATUS.ERROR:
+      // Blocked, waiting for the user. 4/7 says what it was doing when it got
+      // stuck, so a dock-return blocked by an obstacle is actionable as such.
+      return pausedFromRaw === PAUSED_FROM.ERROR_RETURNING ? 'error_returning' : 'error';
     case STATUS.DOCKED:
       return 'charging';
     case STATUS.CHARGED:
@@ -76,13 +82,20 @@ const STATE_NAMES = {
   charging: 'charging',
   docked: 'docked',
   station: 'station working',
+  error_returning: 'blocked returning to dock',
+  error: 'error',
   unknown: 'unknown',
 };
 
 // True while the robot is mid-job: cleaning, driving home, or paused doing either.
 function isActive(status) {
+  // ERROR counts as active: the robot is blocked mid-job, so the running area
+  // must be kept rather than reset to 0 while it waits for the user.
   return (
-    status === STATUS.CLEANING || status === STATUS.RETURNING || status === STATUS.PAUSED
+    status === STATUS.CLEANING ||
+    status === STATUS.RETURNING ||
+    status === STATUS.PAUSED ||
+    status === STATUS.ERROR
   );
 }
 

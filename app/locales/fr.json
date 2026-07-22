@@ -32,6 +32,8 @@
     "charging": "En charge",
     "docked": "Sur la base, chargé",
     "station": "Station en marche",
-    "unknown": "Inconnu"
+    "unknown": "Inconnu",
+    "error_returning": "Bloqué en retour à la base",
+    "error": "Erreur"
   }
 }

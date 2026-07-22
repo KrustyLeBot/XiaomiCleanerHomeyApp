@@ -22,13 +22,15 @@ identifiers are English; only the display names are translated.
   "resume cleaning" starts a **brand-new full clean** of the whole home. The app
   never guesses which one you meant.
 - **Actions** — Start, Pause, Resume (×2).
-- **Flow triggers** — cleaning interrupted, dock-return interrupted, cleaning
-  finished, status changed.
+- **Flow triggers** — cleaning interrupted, dock-return interrupted, blocked
+  returning to dock, blocked (error), cleaning finished, status changed. The
+  four "robot is stuck" triggers all fire 90 s after the robot stops, and are
+  cancelled if it frees itself first.
 - **Insights graph** — cleaned area per run (`Cleaned area`).
-- **History** — every state change, timestamped, tagged *flow* (a Homey action
-  did it) or *external* (robot button / Xiaomi app / schedule). In the app's
-  settings page.
-- **Raw MIoT log** — exportable CSV, for diagnosing edge cases.
+- **Device timeline** — every state change appears in Homey's native per-device
+  timeline (via one hidden boolean per state, the only mechanism Homey offers).
+- **Raw MIoT log** — exportable CSV from the app settings, for diagnosing edge
+  cases, plus an error panel showing failed capability writes.
 
 All values below were reverse-engineered by probing a real robot, not taken from
 a spec sheet — the published spec for this model is for a different variant
@@ -46,7 +48,7 @@ Firmware `4.5.6_1087`. Reads use `get_properties` (array params); actions use
 | what | siid | piid | notes |
 |------|------|------|-------|
 | status | 2 | 1 | the main state enum (below) |
-| activity / paused-from | 4 | 7 | `1` cleaning · `0` returning · `6` paused mid-clean · `11` paused mid-return |
+| activity / paused-from | 4 | 7 | `1` cleaning · `0` returning · `6` paused mid-clean · `11` paused mid-return · `16` blocked mid-return |
 | cleaned area (m²) | 4 | 3 | climbs during a run; matches the Xiaomi app exactly |
 | cleaning time (min) | 4 | 2 | minutes elapsed this run |
 | battery % | 3 | 1 | |
@@ -71,9 +73,10 @@ differed between the two pauses.
 | 6 | on dock, charging | `charging` |
 | 13 | on dock, fully charged | `docked` |
 | 22 | station cycle (dust/mop), briefly after docking | `station` |
+| 4 | blocked / error, waiting for the user (`fault` non-zero) | `error_returning` / `error` |
 | other | unseen value | `unknown` |
 
-Status `15` (Error) from the published spec **never appears** on this robot.
+Status `15` (Error) from the published spec **never appears** on this robot - the real error status is `4`, seen when an obstacle blocked the dock return.
 
 ### Actions
 
@@ -137,11 +140,11 @@ doesn't loop forever.
   "cleaning finished" trigger and the area graph both treat the intermediate
   dock as an end. The firmware exposes no "job pending" flag, and this case has
   not been captured live yet — it will be fixed once a real recharge is logged.
-- **History "external" can't be broken down.** Homey only sees changes it caused;
-  a robot driven by its button, the Xiaomi app, or its own schedule is invisible
-  until the next poll, so those all read *external* with no finer attribution.
 - **Poll granularity.** States shorter than the poll interval (default 10 s,
   configurable) may not be recorded.
+- **Stuck notifications are delayed 90 s.** The robot stops briefly on its own
+  and resumes unaided, so notifying immediately produced false alarms. Applies
+  to both pause and error triggers.
 
 ## Project layout
 
