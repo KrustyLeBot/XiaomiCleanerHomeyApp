@@ -29,9 +29,17 @@ The only surviving instance state, and why it is acceptable:
 | var | purpose | safe because |
 |-----|---------|--------------|
 | `lastStatus` / `lastState` | detect *changes* between polls | compared against fresh values, never a source of truth |
-| `runningArea` | peak area of the run in progress | frozen into `last_cleaned_area` on dock arrival |
 | `cleanedThisCycle` | "did it really clean?" guard for `task_completed` | only gates one notification; without it the robot's nightly dock wandering would spam |
 | `failures` | consecutive read timeouts | unrelated to robot state |
+| `stuckTimer` / `stuckNotified` | 90 s confirm delay, one notification per episode | notification plumbing, mirrors nothing |
+
+Deleted once the robot turned out to report it directly:
+
+- `runningArea` — held the peak area because a recharge looked like an end.
+  `4/3` survives the dock untouched (held 14 through a whole charge), so the
+  freeze reads the live value.
+- `lastFault` — stored `fault` for a token read 90 s later, by which time it
+  could have changed. The trigger re-reads `2/2` from the robot instead.
 
 ### Verify field meanings against the Xiaomi app
 

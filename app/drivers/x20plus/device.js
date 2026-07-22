@@ -19,7 +19,6 @@ class X20PlusDevice extends Homey.Device {
     this.lastStatus = null;
     this.lastState = null; // last displayed state, for timeline toggling
     this.cleanedThisCycle = false;
-    this.runningArea = 0; // peak area of the in-progress clean
 
     // Devices paired before a capability was added keep their old capability
     // list (Homey caches it at pairing). Add any missing ones so new features
@@ -103,9 +102,6 @@ class X20PlusDevice extends Homey.Device {
     // siid 4 piid 3 = cleaned area in m2, verified against the Xiaomi app
     // (12 m2 there, 12 here). s4p1 is something else and stays near 0.
     const cleanArea = values.s4p3;
-    // Non-zero only in status 4; carried into the error triggers as a token so
-    // the notification can name the actual fault.
-    this.lastFault = values.fault;
 
     if (typeof battery === 'number') {
       await this.setCapabilityValue('measure_battery', battery).catch(() => {});
@@ -114,9 +110,9 @@ class X20PlusDevice extends Homey.Device {
     // Show the running area only while the robot is working; drop to 0 once it
     // is idle/docked, so the Insights graph shows a clear bump per clean rather
     // than holding the last total flat between runs.
-    // KNOWN LIMIT: a mid-clean recharge docks (status 6) and reads as idle, so
-    // the graph drops to 0 there too - one clean shows as two bumps. Same
-    // unresolved case as task_completed; needs a real recharge log.
+    // A mid-clean recharge keeps status 3 (PAUSED) while on the dock, so it
+    // stays "active" here and the area survives the charge as one bump. The
+    // freeze below is gated on status 6/13, which a recharge never reports.
     if (typeof cleanArea === 'number') {
       const area = isActive(status) ? cleanArea : 0;
       // Log write failures instead of swallowing them, so a broken capability
@@ -126,23 +122,18 @@ class X20PlusDevice extends Homey.Device {
         errlog.add(`set vacuum_clean_area=${area}`, err);
       });
 
-      // Freeze last_cleaned_area on the active -> idle transition, using the
-      // last non-zero running value. This does NOT depend on having seen the
-      // clean start (cleanedThisCycle), so it survives an app restart that
-      // happens mid-clean. runningArea holds the peak while active; when the
-      // robot goes idle with a value > 0, that was a real clean that just ended.
+      // Freeze last_cleaned_area on arrival at the dock, reading the area the
+      // robot itself still reports. The counters survive the trip home (4/3 held
+      // 14 through an entire recharge), so there is nothing to remember locally.
       // Freeze only on a real dock arrival (6/13). Transient statuses like 0/2
-      // also read as "not active" and would otherwise freeze mid-clean, which
-      // reset the running area far too early.
+      // also read as "not active" and would otherwise freeze mid-clean. A
+      // mid-clean recharge reports 3, never 6/13, so it cannot land here either.
       const atDock = status === STATUS.DOCKED || status === STATUS.CHARGED;
-      if (isActive(status)) {
-        if (cleanArea > 0) this.runningArea = cleanArea;
-      } else if (atDock && this.runningArea > 0) {
-        await this.setCapabilityValue('last_cleaned_area', this.runningArea).catch((err) => {
+      if (atDock && cleanArea > 0) {
+        await this.setCapabilityValue('last_cleaned_area', cleanArea).catch((err) => {
           this.error('set last_cleaned_area', err);
-          errlog.add(`set last_cleaned_area=${this.runningArea}`, err);
+          errlog.add(`set last_cleaned_area=${cleanArea}`, err);
         });
-        this.runningArea = 0;
       }
     }
 
@@ -151,13 +142,23 @@ class X20PlusDevice extends Homey.Device {
     if (changed) this.lastStatus = status;
 
     // Track whether a real clean happened this cycle. The robot leaves the dock
-    // and returns on its own (observed at night, battery full, never cleaning),
-    // so "reached dock" alone is not completion - it must have actually cleaned.
+    // and returns on its own (observed at night, battery full, never cleaning,
+    // 10 times in one logged night), so "reached dock" alone is not completion.
+    //
+    // Only status 1 arms it. Using "off the dock with area on the clock" was
+    // tried and fires on night wandering: 4/3 survives docking (held 14 m2
+    // through a whole recharge) and has never been seen resetting, so a robot
+    // leaving the dock still carries the previous run's area and would re-arm
+    // every trip. The area proves nothing on its own; seeing status 1 does.
+    //
+    // Cost: an app restart mid-clean that never observes status 1 again (robot
+    // already heading home) misses that one notification. Accepted - a missed
+    // notification beats one per night-time wander.
     if (status === STATUS.CLEANING) {
       this.cleanedThisCycle = true;
     }
 
-    const state = toState(status, values.s4p7);
+    const state = toState(status, values.s4p7, values.charging);
     await this.setCapabilityValue('vacuum_status', state).catch(() => {});
     await this.setCapabilityValue('vacuum_active', isActive(status)).catch(() => {});
 
@@ -177,21 +178,23 @@ class X20PlusDevice extends Homey.Device {
     await this.fireTriggers(state);
 
     // A clean is finished once the robot is back on the dock after cleaning.
-    // KNOWN LIMIT: if the robot recharges mid-clean, it docks with the flag still
-    // set and fires once early. Reliable for cleans that finish in one run (the
-    // normal case). Needs a real mid-clean-recharge log to tell "docked to
-    // recharge" (low battery, leaves again) from "docked, done". See FINDINGS.md.
-    // task_completed keeps the cleanedThisCycle guard (must have seen status 1
-    // this cycle) so it does NOT fire on the robot's nightly dock wandering.
-    // last_cleaned_area is frozen separately above, on the active->idle edge,
-    // so it survives an app restart mid-clean where this guard would miss.
+    // A mid-clean recharge cannot land here: it reports status 3 (paused) while
+    // charging, never 6/13, so the robot only reaches this branch when the job
+    // is genuinely over. Same edge freezes last_cleaned_area above.
+    // The cleanedThisCycle guard stays: without it the robot's nightly dock
+    // wandering (leaves and returns without cleaning) would fire every time.
     const docked = status === STATUS.DOCKED || status === STATUS.CHARGED;
     if (docked && this.cleanedThisCycle) {
       this.cleanedThisCycle = false;
       await this.toggleEvent('evt_completed');
+      // Report the area that was just frozen, not the live one - vacuum_clean_area
+      // has already been forced to 0 by the time the robot reads as docked.
       await this.homey.flow
         .getDeviceTriggerCard('task_completed')
-        .trigger(this, { battery: this.getCapabilityValue('measure_battery') || 0 })
+        .trigger(this, {
+          battery: this.getCapabilityValue('measure_battery') || 0,
+          area: this.getCapabilityValue('last_cleaned_area') || 0,
+        })
         .catch(this.error);
     }
   }
@@ -202,6 +205,7 @@ class X20PlusDevice extends Homey.Device {
   // timeline entry - which was logging a phantom "started" event on every exit.
   static STATE_EVENT = {
     cleaning: 'evt_cleaning',
+    recharging: 'evt_recharging',
     paused_cleaning: 'evt_paused_cleaning',
     returning: 'evt_returning',
     paused_returning: 'evt_paused_returning',
@@ -264,20 +268,31 @@ class X20PlusDevice extends Homey.Device {
     // notification per episode, however many polls it spans.
     if (this.stuckTimer || this.stuckNotified) return;
 
-    this.stuckTimer = this.homey.setTimeout(() => {
+    this.stuckTimer = this.homey.setTimeout(async () => {
       this.stuckTimer = null;
       // Re-check: only notify if still stuck in the same way. A robot that moved
       // from paused_cleaning to error meanwhile gets the error card on the next
       // poll instead, since stuckNotified is still false.
       if (this.getCapabilityValue('vacuum_status') !== state) return;
       this.stuckNotified = true;
+
+      // Read the fault straight from the robot rather than reusing the value
+      // seen when the timer was armed 90s ago - it may well have changed since.
+      let fault = 0;
+      try {
+        const fresh = await this.client.getProperties([{ did: 'fault', siid: 2, piid: 2 }]);
+        fault = fresh.fault || 0;
+      } catch (err) {
+        // Unreachable robot: notify anyway, the stuck state itself is the news.
+      }
+
       // All four stuck states count as active, so vacuum_clean_area still holds
       // the live area rather than the forced 0 of an idle robot.
       const tokens = {
         status: STATE_NAMES[state] || state,
         battery: this.getCapabilityValue('measure_battery') || 0,
-        fault: this.lastFault || 0,
-        area: this.getCapabilityValue('vacuum_clean_area') || this.runningArea || 0,
+        fault,
+        area: this.getCapabilityValue('vacuum_clean_area') || 0,
       };
       this.homey.flow.getDeviceTriggerCard(state).trigger(this, tokens).catch(this.error);
     }, STUCK_CONFIRM_DELAY);

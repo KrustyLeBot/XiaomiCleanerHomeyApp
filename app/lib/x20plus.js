@@ -47,13 +47,18 @@ const CHARGING = {
 // User-facing state. The robot reports a single "paused" (3) whether it was
 // cleaning or driving home; siid 4 piid 7 says which (6 vs 11), verified live
 // by pausing each activity in turn. Read straight from the robot, no tracking.
-function toState(status, pausedFromRaw) {
+function toState(status, pausedFromRaw, chargingRaw) {
   switch (status) {
     case STATUS.CLEANING:
       return 'cleaning';
     case STATUS.RETURNING:
       return 'returning';
     case STATUS.PAUSED:
+      // A robot sitting ON the dock while reporting "paused" went back to
+      // recharge mid-job - it resumes on its own. Observed live at 15% battery:
+      // status 3 + charging 1 + 4/7 still 1 (cleaning). Must not read as an
+      // interruption, or every recharge notifies and flows relaunch the clean.
+      if (chargingRaw === CHARGING.ON_DOCK) return 'recharging';
       // Only paused_returning is asserted from a positive match; anything else
       // reads as paused_cleaning (display only - the two resume actions are
       // separate cards the user picks, so this never resumes the wrong task).
@@ -76,6 +81,7 @@ function toState(status, pausedFromRaw) {
 
 const STATE_NAMES = {
   cleaning: 'cleaning',
+  recharging: 'recharging mid-clean',
   paused_cleaning: 'cleaning paused',
   returning: 'returning to dock',
   paused_returning: 'return to dock paused',
@@ -87,7 +93,9 @@ const STATE_NAMES = {
   unknown: 'unknown',
 };
 
-// True while the robot is mid-job: cleaning, driving home, or paused doing either.
+// True while the robot is mid-job: cleaning, driving home, paused doing either,
+// or recharging mid-clean (which reports PAUSED while sitting on the dock, so it
+// is covered here and the running area survives the charge).
 function isActive(status) {
   // ERROR counts as active: the robot is blocked mid-job, so the running area
   // must be kept rather than reset to 0 while it waits for the user.

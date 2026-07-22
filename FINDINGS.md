@@ -77,6 +77,34 @@ for the user.
 Treated as **active** by the app, so the running area is preserved while the
 robot waits rather than being reset to 0.
 
+## No "wheels lifted" flag exists locally
+
+The Xiaomi app reports "wheels suspended", so the sensor exists in hardware. It
+is **not** readable as a property. A full 79-property sweep (siid 1-20, piid
+1-30) taken while cleaning and again while the robot was held in the air differs
+in exactly four fields, all of them expected:
+
+```
+s2p1   1 -> 3    status: cleaning -> paused
+s4p7   1 -> 6    activity: cleaning -> paused mid-clean
+s4p1   2 -> 1    secondary status, follows the main one
+s3p1  25 -> 24   battery, just drained 1%
+```
+
+Every flag candidate (`s4p16`, `s4p17`, `s4p18`, `s4p20`, `s4p25`-`s4p30`) held
+at 0 throughout. Lifting the robot is byte-identical to pressing pause.
+
+The cloud gets this via MIoT **events**, which the local miIO protocol does not
+subscribe to - it only polls properties. Do not go looking for this field again.
+
+Sweep both states and diff them with `probe/sweep.js` before adding any field.
+
+## The robot is a rebadged Dreame
+
+`siid 1 piid 1` reads `dreame` (piid 4 = firmware `1087`). For unidentified
+fields, Dreame protocol documentation is a better reference than the Xiaomi
+`vacuum.c102gl` spec.
+
 ## Status enum (siid 2 piid 1)
 
 Confirmed by driving the robot through each state over two sessions:
@@ -173,7 +201,44 @@ All tested live on the robot, all replied `code 0`:
 the two attempts used the wrong param format. Untested, and not needed: aiid 1
 resumes a paused clean correctly.
 
-## Mid-clean recharge — not detectable, and not a problem
+## Mid-clean recharge — CAPTURED, and detectable
+
+Caught live at 15% battery, 14 m² into a clean. Full sweeps at each phase:
+
+| field | cleaning | returning | **docked to recharge** |
+|-------|----------|-----------|------------------------|
+| `2/1` status | 1 | 5 | **3 (PAUSED)** |
+| `3/2` charging | 2 | 5 | **1 (on dock)** |
+| `4/7` activity | 1 | 1 | **1 (still cleaning)** |
+| `4/17` | 0 | 0 | **1** |
+| `15/3` | 0 | 0 | **1** |
+| `2/2` fault | 0 | **20** | 0 |
+
+The robot **does not report status 6/13 when it docks to recharge** - it reports
+`3` (paused) while physically on the dock. `status 3 + charging 1` is therefore
+the signature, and it is impossible for a finished clean. That combination is
+what `toState()` maps to the `recharging` state.
+
+`4/7` staying at `1` (cleaning) during the return is the corroborating signal:
+on a normal end-of-job return it reads `0`.
+
+Two traps found along the way:
+
+- **`4/18` is NOT a job-pending flag.** It read 20 during the return home and
+  looked promising, but fell back to 0 on docking - it is transient to the drive
+  home (distance or countdown), not job state.
+- **`2/2` (fault) hits 20 during a perfectly normal recharge return.** It is not
+  an error code. Never gate an error state on it; the app only passes it through
+  as a flow token.
+
+Without the `recharging` state the robot would read as `paused_cleaning` while
+charging, fire the "cleaning interrupted" trigger 90 s later, and any auto-resume
+flow would cut the charge short.
+
+Still unconfirmed: whether `4/17` / `15/3` return to 0 at the true end of the
+job. The `status 3 + charging 1` test does not depend on them.
+
+## Historical note: why this was thought undetectable
 
 The robot sometimes returns to charge mid-job and resumes on its own. No probed
 property flags "job pending":
@@ -211,6 +276,21 @@ KNOWN LIMIT: a mid-clean recharge docks with the flag still set, so it fires
 once early. Needs a real recharge log to separate "docked to recharge" (low
 battery, leaves again) from "docked, done". Today's logs never dropped below
 80%, so the case is still uncaptured.
+
+## Open: rebuild cleanedThisCycle from 4/7
+
+`cleanedThisCycle` is armed only by `status 1`, so a Homey restart during the
+**drive home** loses that run's completion notification (a restart mid-clean is
+fine - the app comes back, still sees status 1, and re-arms).
+
+`4/7` should be able to replace the flag entirely: it read `1` (cleaning) all
+through a recharge return, so "returning with 4/7 == 1" means a job is still
+open. If a true end-of-job return reads `4/7 == 0`, then arming on
+`status 5 && 4/7 == 1` reconstructs the flag from the robot with no local state.
+
+**Do not implement before observing a real end-of-job return.** Every test run so
+far was stopped by hand. If `4/7` stays `1` until docking on a normal finish, the
+rule also matches night wandering and brings back the spam it exists to prevent.
 
 ## Still open
 

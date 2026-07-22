@@ -21,7 +21,8 @@ const WATCHED = [
   { did: 's4p3', siid: 4, piid: 3 },
   { did: 's4p7', siid: 4, piid: 7 },
   { did: 's4p16', siid: 4, piid: 16 },
-  { did: 's4p17', siid: 4, piid: 17 },
+  { did: 's4p17', siid: 4, piid: 17 }, // 1 while docked to recharge mid-clean
+  { did: 's4p18', siid: 4, piid: 18 },
   { did: 's4p20', siid: 4, piid: 20 },
   { did: 's4p25', siid: 4, piid: 25 },
   { did: 's7p9', siid: 7, piid: 9 },

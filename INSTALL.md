@@ -9,6 +9,12 @@ a bug in the CLI itself). Use v3:
 npm install -g homey@3
 ```
 
+Every command then prints an "Update available 3.x → 4.x" banner. **Ignore it.**
+Running `npm i -g homey` upgrades to v4 and no command works afterwards, not
+even `--version`; npm only warns that `homey-api` wants Node >= 24 and installs
+anyway. The same line above rolls it back. Already-installed apps on the Homey
+are unaffected - only the local CLI breaks.
+
 Then log in — this opens a browser:
 
 ```powershell

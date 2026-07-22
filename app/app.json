@@ -44,6 +44,13 @@
           }
         },
         {
+          "id": "recharging",
+          "title": {
+            "en": "Recharging mid-clean",
+            "fr": "Recharge en cours de nettoyage"
+          }
+        },
+        {
           "id": "paused_cleaning",
           "title": {
             "en": "Cleaning paused",
@@ -140,6 +147,17 @@
       "title": {
         "en": "Cleaning",
         "fr": "Nettoyage en cours"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": null,
+      "insights": true
+    },
+    "evt_recharging": {
+      "type": "boolean",
+      "title": {
+        "en": "Recharging mid-clean",
+        "fr": "Recharge en cours de nettoyage"
       },
       "getable": true,
       "setable": false,
@@ -288,6 +306,7 @@
         "vacuum_clean_area",
         "last_cleaned_area",
         "evt_cleaning",
+        "evt_recharging",
         "evt_paused_cleaning",
         "evt_returning",
         "evt_paused_returning",
@@ -574,8 +593,8 @@
           "fr": "Nettoyage terminé"
         },
         "hint": {
-          "en": "Fires when the robot returns to the dock after actually cleaning. Does not fire when it just moves around without cleaning.",
-          "fr": "Se déclenche quand le robot rentre à la base après avoir réellement nettoyé. Ne se déclenche pas s il se déplace sans nettoyer."
+          "en": "Fires when the robot returns to the dock after actually cleaning. Does not fire on a mid-clean recharge, nor when it just moves around without cleaning.",
+          "fr": "Se déclenche quand le robot rentre à la base après avoir réellement nettoyé. Ne se déclenche pas lors d une recharge en cours de nettoyage, ni s il se déplace sans nettoyer."
         },
         "args": [
           {
@@ -591,6 +610,14 @@
             "title": {
               "en": "Battery",
               "fr": "Batterie"
+            }
+          },
+          {
+            "name": "area",
+            "type": "number",
+            "title": {
+              "en": "Cleaned area",
+              "fr": "Surface nettoyée"
             }
           }
         ]
@@ -656,6 +683,13 @@
                 "title": {
                   "en": "Cleaning",
                   "fr": "Nettoyage en cours"
+                }
+              },
+              {
+                "id": "recharging",
+                "title": {
+                  "en": "Recharging mid-clean",
+                  "fr": "Recharge en cours de nettoyage"
                 }
               },
               {
