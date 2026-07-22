@@ -46,14 +46,20 @@ Firmware `4.5.6_1087`. Reads use `get_properties` (array params); actions use
 | what | siid | piid | notes |
 |------|------|------|-------|
 | status | 2 | 1 | the main state enum (below) |
-| paused-from | 4 | 3 | `6` = was cleaning, `11` = was returning |
-| cleaned area | 4 | 1 | climbs during a run, holds, resets next clean |
+| activity / paused-from | 4 | 7 | `1` cleaning · `0` returning · `6` paused mid-clean · `11` paused mid-return |
+| cleaned area (m²) | 4 | 3 | climbs during a run; matches the Xiaomi app exactly |
+| cleaning time (min) | 4 | 2 | minutes elapsed this run |
 | battery % | 3 | 1 | |
 | charging state | 3 | 2 | `1` on dock, `2` off dock, `5` driving home |
 
 The published `d109gl` spec puts status at `2/2` and fault at `2/3`. On the
 `c102gl` those are wrong — status is `2/1`, and most of the `d109gl` properties
 don't exist on this firmware.
+
+The area and activity fields were pinned down by comparing against the Xiaomi
+app live (it read 14 m² / 17 min while `4/3` read 14 and `4/2` read 18), and by
+pausing a clean and a dock-return in turn: `4/7` was the only field that
+differed between the two pauses.
 
 ### Status enum (siid 2 piid 1)
 

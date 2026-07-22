@@ -8,13 +8,14 @@ const PROPERTIES = [
   { did: 'status', siid: 2, piid: 1 },
   { did: 'charging', siid: 3, piid: 2 },
   { did: 'battery', siid: 3, piid: 1 },
-  { did: 'paused_from', siid: 4, piid: 3 },
-  { did: 'clean_area', siid: 4, piid: 1 }, // cleaned area, climbs during a run
+  { did: 'clean_area', siid: 4, piid: 3 }, // m2 cleaned this run (matches the Xiaomi app)
+  { did: 'clean_time', siid: 4, piid: 2 }, // minutes elapsed this run
+  { did: 'paused_from', siid: 4, piid: 7 }, // what was interrupted (see below)
 ];
 
-// siid 4 piid 3 says what the robot was doing when it paused. Observed live:
-// the firmware does retain the interrupted activity, contrary to what status
-// and charging alone suggest.
+// siid 4 piid 7 is an activity code. Verified live by pausing each activity in
+// turn: only this field differs between the two kinds of pause.
+//   0 = returning to dock, 1 = cleaning, 6 = paused mid-clean, 11 = paused mid-return
 const PAUSED_FROM = {
   CLEANING: 6,
   RETURNING: 11,
@@ -42,8 +43,8 @@ const CHARGING = {
 };
 
 // User-facing state. The robot reports a single "paused" (3) whether it was
-// cleaning or driving home; siid 4 piid 3 (pausedFromRaw) says which, so the
-// two paused states are read straight from the robot with no local tracking.
+// cleaning or driving home; siid 4 piid 7 says which (6 vs 11), verified live
+// by pausing each activity in turn. Read straight from the robot, no tracking.
 function toState(status, pausedFromRaw) {
   switch (status) {
     case STATUS.CLEANING:
@@ -51,11 +52,9 @@ function toState(status, pausedFromRaw) {
     case STATUS.RETURNING:
       return 'returning';
     case STATUS.PAUSED:
-      // The robot reports what it was doing directly (siid 4 piid 3), always
-      // observed as 6 (cleaning) or 11 (returning) - no local fallback needed.
-      // An unseen value defaults to paused_cleaning only for display; the
-      // resume actions are separate cards the user picks, so this default never
-      // decides which task gets resumed.
+      // Only paused_returning is asserted from a positive match; anything else
+      // reads as paused_cleaning (display only - the two resume actions are
+      // separate cards the user picks, so this never resumes the wrong task).
       return pausedFromRaw === PAUSED_FROM.RETURNING ? 'paused_returning' : 'paused_cleaning';
     case STATUS.DOCKED:
       return 'charging';

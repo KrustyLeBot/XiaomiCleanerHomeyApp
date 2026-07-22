@@ -34,6 +34,30 @@ Everything else in siid 2 / siid 3 returns `code -1` (does not exist).
 
 Notably absent on this firmware: siid 2 piid 4 (mode) and piid 7 (clean-time).
 
+## siid 4 — activity, area and time
+
+Confirmed live against the Xiaomi app and by pausing each activity in turn.
+
+| piid | meaning | values |
+|------|---------|--------|
+| 7 | **activity code** | `1` cleaning · `0` returning · `6` paused mid-clean · `11` paused mid-return |
+| 3 | **cleaned area, m²** | matches the Xiaomi app exactly (app said 14 m², field read 14) |
+| 2 | **cleaning time, minutes** | app said 17 min, field read 18 |
+| 1 | secondary status enum | `2` cleaning · `3` returning · `6` docked |
+
+`4/7` is what separates the two kinds of pause: with the robot paused, it was
+the ONLY field that differed between a paused clean (6) and a paused
+dock-return (11). Everything else - status, charging, 4/1, 4/3, 4/4, 4/5 - read
+identically in both.
+
+### Trap: 4/3 is NOT the pause field
+
+An earlier pass read 6 and 11 in `4/3` during two pauses and concluded it was
+the "paused from" field. It is not - `4/3` is the cleaned area, and it merely
+happened to be 6 m² and 11 m² at those moments. The giveaway: during a single
+uninterrupted clean `4/3` climbs 0 -> 11 -> 18 -> 21, which no activity code
+would do. Verify any such field against the Xiaomi app before trusting it.
+
 ## Status enum (siid 2 piid 1)
 
 Confirmed by driving the robot through each state over two sessions:
@@ -60,25 +84,25 @@ including when the wheels were lifted mid-clean.
 `5` appears exactly when status is `5` and clears the moment the robot docks.
 It tracks *driving home*, not intent.
 
-## The single-resume question: answered NO
+## The two kinds of pause: distinguishable via siid 4 piid 7
 
-A "resume whatever you were doing" action is **not implementable** on this
-firmware. Pausing a clean and pausing a dock-return both yield status `3` with
-charging `2`. No readable property retains which activity was interrupted.
+Status alone cannot tell them apart - pausing a clean and pausing a dock-return
+both yield status `3` with charging `2`, byte-identical (verified by sending the
+robot home, pausing it, and watching it hold for 30 s).
 
-Settled by direct test: robot sent home (status 5, charging 5), then paused via
-aiid 2. It went to `status=3 charging=2` and held there for 30 s with no
-flicker — byte-identical to a paused clean.
+But `siid 4 piid 7` does distinguish them: `6` when the paused activity was
+cleaning, `11` when it was the dock-return. Verified by pausing each in turn and
+diffing every readable field - `4/7` was the only one that differed. The app
+reads it directly, with no local tracking of the previous status.
 
-Rejected hypothesis: charging `5` looked like a "was docking" marker, since one
-log showed `3`/`5` together. That sample was the robot briefly resuming its
-drive, not intent being retained. `charging=5` only ever accompanies `status=5`
-(actively driving home).
+Rejected hypothesis along the way: charging `5` looked like a "was docking"
+marker, since one log showed `3`/`5` together. That sample was the robot briefly
+resuming its drive, not intent being retained. `charging=5` only ever
+accompanies `status=5` (actively driving home).
 
-Tracking the previous status in app memory was considered and rejected: it
-breaks across Homey restarts and whenever the robot is driven from the Xiaomi
-app, and a wrong guess sends the robot the wrong way. Two explicit actions are
-honest; a guess dressed as intelligence is not.
+The app still ships **two explicit resume actions** rather than one "resume
+whatever you were doing": the state is now known reliably, but a wrong resume is
+destructive (see below), so the choice stays with the user's flow.
 
 ### Why this is dangerous, not just inconvenient
 
@@ -135,9 +159,8 @@ resumes a paused clean correctly.
 The robot sometimes returns to charge mid-job and resumes on its own. No probed
 property flags "job pending":
 
-- `siid 4 piid 7` looked promising (0 -> 1 when cleaning starts) but drops back
-  to 0 as soon as the robot leaves the floor. It means "cleaning right now",
-  which status already says.
+- `siid 4 piid 7` is the activity code (see the siid 4 section below) - it says
+  what the robot is doing, not whether a job is outstanding.
 - `siid 4 piid 1` is a second status field (2 = cleaning, 3 = returning,
   6 = docked). Same information, different enum.
 

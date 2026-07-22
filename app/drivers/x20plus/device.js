@@ -97,13 +97,12 @@ class X20PlusDevice extends Homey.Device {
   }
 
   async update(values) {
-    // The poll uses the recorder's WATCHED set, where fields carry raw dids:
-    // status=s2p1? no - status/battery keep names, but area is s4p1 and the
-    // pause field is s4p3. Map them here so the rest reads clearly.
+    // The poll uses the recorder's WATCHED set, whose fields carry raw dids.
     const status = values.status;
     const battery = values.battery;
-    const pausedFromRaw = values.s4p3;
-    const cleanArea = values.s4p1;
+    // siid 4 piid 3 = cleaned area in m2, verified against the Xiaomi app
+    // (12 m2 there, 12 here). s4p1 is something else and stays near 0.
+    const cleanArea = values.s4p3;
 
     if (typeof battery === 'number') {
       await this.setCapabilityValue('measure_battery', battery).catch(() => {});
@@ -155,7 +154,7 @@ class X20PlusDevice extends Homey.Device {
       this.cleanedThisCycle = true;
     }
 
-    const state = toState(status, pausedFromRaw);
+    const state = toState(status, values.s4p7);
     await this.setCapabilityValue('vacuum_status', state).catch(() => {});
     await this.setCapabilityValue('vacuum_active', isActive(status)).catch(() => {});
 
