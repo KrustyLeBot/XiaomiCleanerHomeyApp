@@ -9,6 +9,9 @@ const errlog = require('../../lib/errlog');
 const DEFAULT_POLL_SECONDS = 10;
 const FAILURES_BEFORE_UNAVAILABLE = 3; // the robot ignores reads while asleep
 const FLUSH_INTERVAL = 60000; // batch store writes rather than one per poll
+// The robot pauses briefly by itself (~30s observed) and resumes unaided, so a
+// pause must persist this long before it is worth notifying about.
+const PAUSE_CONFIRM_DELAY = 90000;
 
 class X20PlusDevice extends Homey.Device {
   async onInit() {
@@ -126,9 +129,13 @@ class X20PlusDevice extends Homey.Device {
       // clean start (cleanedThisCycle), so it survives an app restart that
       // happens mid-clean. runningArea holds the peak while active; when the
       // robot goes idle with a value > 0, that was a real clean that just ended.
+      // Freeze only on a real dock arrival (6/13). Transient statuses like 0/2
+      // also read as "not active" and would otherwise freeze mid-clean, which
+      // reset the running area far too early.
+      const atDock = status === STATUS.DOCKED || status === STATUS.CHARGED;
       if (isActive(status)) {
         if (cleanArea > 0) this.runningArea = cleanArea;
-      } else if (this.runningArea > 0) {
+      } else if (atDock && this.runningArea > 0) {
         await this.setCapabilityValue('last_cleaned_area', this.runningArea).catch((err) => {
           this.error('set last_cleaned_area', err);
           errlog.add(`set last_cleaned_area=${this.runningArea}`, err);
@@ -224,9 +231,29 @@ class X20PlusDevice extends Homey.Device {
       .trigger(this, tokens)
       .catch(this.error);
 
-    // Driven by the same state shown in the UI, so they can never disagree.
+    // Pause triggers are delayed: the robot pauses briefly on its own (observed
+    // ~30s when it was knocked off the dock and resumed by itself). Firing at
+    // once produced a "resume?" notification for a pause that fixed itself.
+    // The timer is cancelled below as soon as the state stops being a pause.
     if (state === 'paused_cleaning' || state === 'paused_returning') {
-      await this.homey.flow.getDeviceTriggerCard(state).trigger(this, tokens).catch(this.error);
+      // pauseNotified keeps it to one notification per pause episode, however
+      // many polls the pause spans.
+      if (!this.pauseTimer && !this.pauseNotified) {
+        this.pauseTimer = this.homey.setTimeout(() => {
+          this.pauseTimer = null;
+          // Re-check: only notify if still paused in the same way.
+          if (this.getCapabilityValue('vacuum_status') !== state) return;
+          this.pauseNotified = true;
+          this.homey.flow.getDeviceTriggerCard(state).trigger(this, tokens).catch(this.error);
+        }, PAUSE_CONFIRM_DELAY);
+      }
+    } else {
+      // Left the pause: cancel a pending notification and re-arm for next time.
+      if (this.pauseTimer) {
+        this.homey.clearTimeout(this.pauseTimer);
+        this.pauseTimer = null;
+      }
+      this.pauseNotified = false;
     }
 
     // No "cleaning complete" trigger: this firmware exposes no job-pending flag,
@@ -275,6 +302,7 @@ class X20PlusDevice extends Homey.Device {
   async onDeleted() {
     if (this.pollTimer) this.homey.clearInterval(this.pollTimer);
     if (this.flushTimer) this.homey.clearInterval(this.flushTimer);
+    if (this.pauseTimer) this.homey.clearTimeout(this.pauseTimer);
     await this.recorder.flush();
     if (this.client) this.client.destroy();
   }
