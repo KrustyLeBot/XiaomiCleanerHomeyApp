@@ -89,6 +89,19 @@ One trigger card per stuck state (`paused_cleaning`, `paused_returning`,
 looked up by state id. All share the 90 s confirm delay and the
 one-notification-per-episode guard.
 
+### Long enum labels need uiComponent `picker`, not `sensor`
+
+`sensor` renders capabilities in a fixed-width icon grid on mobile: anything
+past ~20 characters is ellipsed, and it never wraps. Shortening the French
+labels did nothing, because the column width does not depend on the text.
+
+`picker` renders full-width and shows the whole label. It works on a
+`setable: false` capability — Homey does not turn it into an editable control.
+The SDK's "3 words max" guidance applies to the grid, not to this case.
+
+Layout is otherwise not controllable: no full-width flag, no wrapping option,
+no custom uiComponent. `capabilitiesOptions` has nothing for it either.
+
 ### Don't add conditional buttons
 
 Homey has no runtime show/hide for capabilities. `addCapability` /
@@ -112,7 +125,7 @@ the device.
 
 ```bash
 cd app
-homey app validate --level debug   # CLI v4 is broken on Node 22, use homey@3
+homey app validate --level debug   # CLI 4.x needs Node >= 24; on Node 22 use homey@3
 ```
 
 Live-read the robot with the scripts in `probe/` (credentials come from `.env`,

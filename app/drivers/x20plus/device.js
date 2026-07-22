@@ -50,6 +50,20 @@ class X20PlusDevice extends Homey.Device {
         }
       }
     }
+
+    // Drop capabilities the manifest no longer declares. A device paired before
+    // one was removed keeps it forever otherwise, and Homey then walks a
+    // capability it has no definition for - which crashes the device page.
+    for (const cap of this.getCapabilities()) {
+      if (!wanted.includes(cap)) {
+        try {
+          await this.removeCapability(cap);
+        } catch (err) {
+          this.error(`removeCapability ${cap}`, err);
+          errlog.add(`removeCapability ${cap}`, err);
+        }
+      }
+    }
   }
 
   startPolling() {
@@ -160,7 +174,6 @@ class X20PlusDevice extends Homey.Device {
 
     const state = toState(status, values.s4p7, values.charging);
     await this.setCapabilityValue('vacuum_status', state).catch(() => {});
-    await this.setCapabilityValue('vacuum_active', isActive(status)).catch(() => {});
 
     // Toggle the timeline boolean ONLY when the displayed state actually changes.
     // Doing it every poll would spam the history with the same state on a loop.

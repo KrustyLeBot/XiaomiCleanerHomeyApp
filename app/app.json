@@ -34,7 +34,7 @@
       },
       "getable": true,
       "setable": false,
-      "uiComponent": "sensor",
+      "uiComponent": "picker",
       "values": [
         {
           "id": "cleaning",
@@ -47,7 +47,7 @@
           "id": "recharging",
           "title": {
             "en": "Recharging mid-clean",
-            "fr": "Recharge en cours de nettoyage"
+            "fr": "Recharge mi-nettoyage"
           }
         },
         {
@@ -113,17 +113,8 @@
             "fr": "Inconnu"
           }
         }
-      ]
-    },
-    "vacuum_active": {
-      "type": "boolean",
-      "title": {
-        "en": "Job in progress",
-        "fr": "Tâche en cours"
-      },
-      "getable": true,
-      "setable": false,
-      "uiComponent": "sensor"
+      ],
+      "icon": "/assets/status.svg"
     },
     "vacuum_clean_area": {
       "type": "number",
@@ -157,7 +148,7 @@
       "type": "boolean",
       "title": {
         "en": "Recharging mid-clean",
-        "fr": "Recharge en cours de nettoyage"
+        "fr": "Recharge mi-nettoyage"
       },
       "getable": true,
       "setable": false,
@@ -266,7 +257,8 @@
       "getable": true,
       "setable": false,
       "uiComponent": "sensor",
-      "insights": true
+      "insights": true,
+      "icon": "/assets/icon.svg"
     },
     "evt_error_returning": {
       "type": "boolean",
@@ -301,7 +293,6 @@
       "class": "other",
       "capabilities": [
         "vacuum_status",
-        "vacuum_active",
         "measure_battery",
         "vacuum_clean_area",
         "last_cleaned_area",
@@ -689,7 +680,7 @@
                 "id": "recharging",
                 "title": {
                   "en": "Recharging mid-clean",
-                  "fr": "Recharge en cours de nettoyage"
+                  "fr": "Recharge mi-nettoyage"
                 }
               },
               {

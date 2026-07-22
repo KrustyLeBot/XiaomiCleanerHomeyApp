@@ -2,18 +2,42 @@
 
 ## One-time setup
 
-The Homey CLI **4.x is broken on Node 22** (`ERR_REQUIRE_ESM` on every command,
-a bug in the CLI itself). Use v3:
+The CLI version must match the Node version — mismatching them breaks every
+command, including `--version`:
+
+| Node | CLI | why |
+|------|-----|-----|
+| >= 24 | `homey` (4.x) | `homey-api` requires Node >= 24 |
+| 22 | `homey@3` | v4 throws `ERR_REQUIRE_ESM` on every command |
+
+On Node 22, the "Update available 3.x → 4.x" banner is a trap: npm only warns
+about the engine mismatch and installs anyway. Roll back with
+`npm install -g homey@3`. Apps already installed on the Homey are unaffected —
+only the local CLI breaks.
+
+### Upgrading Node on Windows
+
+`winget upgrade OpenJS.NodeJS` may fail with **error 1714 / system 1612** ("the
+older version cannot be removed") when the original MSI is no longer cached.
+Rather than repairing the MSI, install [nvm-windows](https://github.com/coreybutler/nvm-windows)
+and leave the broken install alone:
 
 ```powershell
-npm install -g homey@3
+winget install CoreyButler.NVMforWindows
+# new terminal
+nvm install 26
+nvm use 26
 ```
 
-Every command then prints an "Update available 3.x → 4.x" banner. **Ignore it.**
-Running `npm i -g homey` upgrades to v4 and no command works afterwards, not
-even `--version`; npm only warns that `homey-api` wants Node >= 24 and installs
-anyway. The same line above rolls it back. Already-installed apps on the Homey
-are unaffected - only the local CLI breaks.
+Two gotchas after switching:
+
+- **npm 11 blocks install scripts.** A plain `npm i -g homey` leaves native deps
+  unbuilt and the old binary in place. Use
+  `npm install -g --allow-scripts=sharp,protobufjs,ssh2 homey`.
+- **Stale shims win on PATH.** `%APPDATA%\npm` comes before nvm's directory, so
+  its leftover `homey`, `homey.cmd`, `homey.ps1` keep launching the old version
+  even once v4 is installed. Delete those three files; `Get-Command homey`
+  should then resolve under `C:\nvm4w\nodejs`.
 
 Then log in — this opens a browser:
 
