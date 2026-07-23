@@ -2,7 +2,7 @@
 
 const Homey = require('homey');
 const MiioClient = require('../../lib/miio-client');
-const { ACTIONS, STATUS, STATE_NAMES, toState, isActive } = require('../../lib/x20plus');
+const { ACTIONS, STATUS, PAUSED_FROM, STATE_NAMES, toState, isActive } = require('../../lib/x20plus');
 const { Recorder, WATCHED } = require('../../lib/recorder');
 const errlog = require('../../lib/errlog');
 
@@ -159,16 +159,15 @@ class X20PlusDevice extends Homey.Device {
     // and returns on its own (observed at night, battery full, never cleaning,
     // 10 times in one logged night), so "reached dock" alone is not completion.
     //
-    // Only status 1 arms it. Using "off the dock with area on the clock" was
-    // tried and fires on night wandering: 4/3 survives docking (held 14 m2
-    // through a whole recharge) and has never been seen resetting, so a robot
-    // leaving the dock still carries the previous run's area and would re-arm
-    // every trip. The area proves nothing on its own; seeing status 1 does.
-    //
-    // Cost: an app restart mid-clean that never observes status 1 again (robot
-    // already heading home) misses that one notification. Accepted - a missed
-    // notification beats one per night-time wander.
-    if (status === STATUS.CLEANING) {
+    // Armed by status 1 (cleaning) OR by a genuine return home: status 5 with
+    // 4/7 == 1. A full-cycle log confirmed 4/7 reads 1 on every real return and
+    // 0 on every night wander (which never cleaned), so the return case adds no
+    // false positives - and it means an app restart during the drive home still
+    // notifies, where "status 1 only" would have missed it.
+    // 4/3 alone is not enough: it survives docking (held 14 m2 through a whole
+    // recharge) and never resets, so a wandering robot still carries stale area.
+    const returningFromJob = status === STATUS.RETURNING && values.s4p7 === PAUSED_FROM.CLEANING_ACTIVITY;
+    if (status === STATUS.CLEANING || returningFromJob) {
       this.cleanedThisCycle = true;
     }
 

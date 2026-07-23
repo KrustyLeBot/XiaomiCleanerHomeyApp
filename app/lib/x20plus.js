@@ -20,6 +20,11 @@ const PAUSED_FROM = {
   CLEANING: 6,
   RETURNING: 11,
   ERROR_RETURNING: 16, // blocked by an obstacle on the way back to the dock
+  // Not a pause value: 4/7 == 1 means the *current* activity is cleaning. It
+  // reads 1 all through a real clean and its recharge, and drops to 0 the
+  // instant the robot docks at end of job - so "returning with 4/7 == 1" is a
+  // genuine return home, distinct from night wandering (which reads 0).
+  CLEANING_ACTIVITY: 1,
 };
 
 const ACTIONS = {

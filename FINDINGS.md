@@ -277,20 +277,42 @@ once early. Needs a real recharge log to separate "docked to recharge" (low
 battery, leaves again) from "docked, done". Today's logs never dropped below
 80%, so the case is still uncaptured.
 
-## Open: rebuild cleanedThisCycle from 4/7
+## End-of-job vs recharge — full cycle finally captured
 
-`cleanedThisCycle` is armed only by `status 1`, so a Homey restart during the
-**drive home** loses that run's completion notification (a restart mid-clean is
-fine - the app comes back, still sees status 1, and re-arms).
+A 15h log caught two complete cleans, one with a mid-clean recharge, plus a
+night of wandering. Confirmed:
 
-`4/7` should be able to replace the flag entirely: it read `1` (cleaning) all
-through a recharge return, so "returning with 4/7 == 1" means a job is still
-open. If a true end-of-job return reads `4/7 == 0`, then arming on
-`status 5 && 4/7 == 1` reconstructs the flag from the robot with no local state.
+| phase | status | charging | 4/7 | 4/3 |
+|-------|--------|----------|-----|-----|
+| cleaning | 1 | 2 | 1 | climbs |
+| return to recharge | 5 | 5 | **1** | held |
+| **on dock recharging** | **3** | **1** | **1** | held (14) |
+| resumes | 1 | 2 | 1 | climbs from 14 |
+| return at end of job | 5 | 5 | **1** | final |
+| station cycle | 22 | 1 | **0** | final |
+| **docked, done** | 6 -> 13 | 1 | **0** | held till next clean |
+| night wandering | 5 | 5 | **0** | 0 |
 
-**Do not implement before observing a real end-of-job return.** Every test run so
-far was stopped by hand. If `4/7` stays `1` until docking on a normal finish, the
-rule also matches night wandering and brings back the spam it exists to prevent.
+Two clean signals fall out of this:
+
+- **`status 3 + charging 1` is unique to a mid-clean recharge.** End of job goes
+  5 -> 22 -> 6 -> 13, never 3. This is what `toState` maps to `recharging`.
+- **`4/7` is 1 on every real return, 0 on night wandering.** So
+  `status 5 && 4/7 == 1` is a genuine "returning from a job", and now also arms
+  `cleanedThisCycle` - a Homey restart during the drive home still notifies.
+  `4/3` cannot do this: it survives docking and never resets, so a wandering
+  robot still carries the previous run's area.
+
+`task_completed` fired exactly twice over the whole log (once per real clean,
+17 m2 and 18 m2), never during the recharge or the wandering. Verified by
+replaying the CSV through the state machine.
+
+## Open: status 2
+
+Seen twice, battery 100%, 4/3 = 0, once with charging 1 and once with
+charging 2 - too ambiguous to name on two contradictory samples. Maps to
+`unknown` (correct default). Probe it if it recurs: it may be a brief station
+maintenance cycle.
 
 ## Still open
 
